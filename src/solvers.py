@@ -1,7 +1,6 @@
 import gurobipy as grb
 import cplex
 import numpy as np
-from docplex.mp.model import Model
 from constants import (
     RAM_LIMIT,
     TIME_LIMIT,
@@ -110,95 +109,6 @@ class GurobiSolver:
             return None, None, None
 
 
-class CPLEXSolver:
-    def __init__(
-        self,
-        *,
-        P,
-        N,
-        theta,
-        eps_R=epsilon_R,
-        eps_P=epsilon_P,
-        eps_N=epsilon_N,
-        lambda_param,
-    ):
-        self.P = P
-        self.N = N
-        self.theta = theta
-        self.epsilon_R = eps_R
-        self.epsilon_P = eps_P
-        self.epsilon_N = eps_N
-        self.lambda_param = lambda_param
-        self.mdl = Model(name="MILP_with_lambda")
-        # if not PRINT_OUTPUT:
-        self.mdl.set_log_output(True)
-        if TIME_LIMIT:
-            self.mdl.set_time_limit(2 * 60)
-        if RAM_LIMIT:
-            self.mdl.parameters.workmem = 4096
-
-    def build_model(self):
-        d = self.P.shape[1]  # Dimension of feature vectors
-        num_P = len(self.P)
-        num_N = len(self.N)
-
-        # Decision variables
-        self.x_vars = self.mdl.binary_var_list(num_P, name="x")
-        self.y_vars = self.mdl.binary_var_list(num_N, name="y")
-        self.w = self.mdl.continuous_var_list(d, name="w")  # Weight vector
-        self.c = self.mdl.continuous_var(name="c")  # Bias term
-        self.V = self.mdl.continuous_var(lb=0, name="V")  # Regularization term
-
-        # Regularization constraint
-        self.mdl.add_constraint(
-            self.V
-            >= (self.theta - 1) * self.mdl.sum(self.x_vars)
-            + self.theta * self.mdl.sum(self.y_vars)
-            + self.theta * self.epsilon_R
-        )
-
-        # Positive class constraints
-        for i, s in enumerate(self.P):
-            dot_product = self.mdl.sum(s[j] * self.w[j] for j in range(d))
-            self.mdl.add_constraint(
-                self.x_vars[i] <= 1 + dot_product - self.c - self.epsilon_P
-            )
-
-        # Negative class constraints
-        for i, s in enumerate(self.N):
-            dot_product = self.mdl.sum(s[j] * self.w[j] for j in range(d))
-            self.mdl.add_constraint(
-                self.y_vars[i] >= dot_product - self.c + self.epsilon_N
-            )
-
-        # Objective function
-        objective = self.mdl.sum(self.x_vars) - self.lambda_param * self.V
-        self.mdl.maximize(objective)
-
-    def solve(self):
-        self.build_model()
-        solution = self.mdl.solve()
-
-        if solution:
-            node_count = self.mdl.solve_details.nb_nodes_processed
-            c_value = self.c.solution_value
-            w_values = [self.w[i].solution_value for i in range(self.P.shape[1])]
-
-            reach = np.sum(
-                np.array(
-                    [
-                        (0 if np.dot(w_values, s) + c_value < self.epsilon_P else 1)
-                        for s in self.P
-                    ]
-                )
-            )
-
-            return reach, int(node_count), solution
-        else:
-            print("No feasible solution found.")
-            return None, None, None
-
-
 class CplexSolver:
     def __init__(
         self,
@@ -219,11 +129,11 @@ class CplexSolver:
         self.epsilon_N = eps_N
         self.lambda_param = lambda_param
         self.mdl = cplex.Cplex()
-        # if not PRINT_OUTPUT:
-        #     self.mdl.set_log_stream(None)
-        #     self.mdl.set_error_stream(None)
-        #     self.mdl.set_warning_stream(None)
-        #     self.mdl.set_results_stream(None)
+        if not PRINT_OUTPUT:
+            self.mdl.set_log_stream(None)
+            self.mdl.set_error_stream(None)
+            self.mdl.set_warning_stream(None)
+            self.mdl.set_results_stream(None)
         if TIME_LIMIT:
             self.mdl.parameters.timelimit.set(2 * 60)
         if RAM_LIMIT:
@@ -294,44 +204,65 @@ class CplexSolver:
         self.mdl.objective.set_sense(self.mdl.objective.sense.maximize)
 
     def solve(self):
-        """
-        Solves the optimization model and returns the reach, node count, and solution.
+        self.build_model()
+        self.mdl.solve()
 
-        Returns:
-            tuple: (reach, node_count, solution) if successful, or (None, None, None) if failed
-        """
+        status = self.mdl.solution.get_status()
+
         try:
-            self.build_model()
-            self.mdl.solve()
-            status = self.mdl.solution.get_status()  # Changed from mdl.get_status()
+            # Check if a feasible or optimal solution is available
+            if status in [
+                self.mdl.solution.status.MIP_optimal,
+                self.mdl.solution.status.MIP_feasible,
+                self.mdl.solution.status.abort_time_limit,
+            ]:
+                # Retrieve the incumbent value (objective value)
+                obj_value = self.mdl.solution.get_objective_value()
 
-            valid_statuses = {
-                cplex.Cplex.solution.status.MIP_optimal,
-                cplex.Cplex.solution.status.MIP_time_limit,
-            }
-
-            if status not in valid_statuses:
-                print(
-                    f"Solution status {status} not acceptable. No feasible solution found."
-                )
-                return None, None, None
-
-            try:
-                node_count = self.mdl.MIP.get_num_nodes_processed()
-                c_value = self.mdl.solution.get_values(self.c_var)
+                # Retrieve solution values for `w` and `c` to calculate `reach`
                 w_values = self.mdl.solution.get_values(self.w_vars)
+                c_value = self.mdl.solution.get_values(self.c_var)
 
-                reaches = np.array(
-                    [(np.dot(w_values, s) + c_value) >= self.epsilon_P for s in self.P]
-                )
-                total_reach = np.sum(reaches)
+                # Calculate `reach`
+                # reach = sum(
+                #     1 for s in self.P if np.dot(w_values, s) + c_value >= self.epsilon_P
+                # )
 
-                return float(total_reach), int(node_count), self.mdl.solution
+                node_count = self.mdl.solution.progress.get_num_nodes_processed()
 
-            except (AttributeError, cplex.CplexError) as e:
-                print(f"Error extracting solution values: {str(e)}")
-                return None, None, None
+                return int(obj_value), int(node_count), self.mdl
+            else:
+                # Handle cases where no feasible solution is found
+                if status == self.mdl.solution.status.abort_time_limit:
+                    # Attempt to retrieve the best solution so far
+                    try:
+                        obj_value = self.mdl.solution.get_objective_value()
+                        print(f"Best incumbent value after time limit: {obj_value}")
 
+                        # Retrieve solution values for `w` and `c` to calculate `reach`
+                        w_values = self.mdl.solution.get_values(self.w_vars)
+                        c_value = self.mdl.solution.get_values(self.c_var)
+
+                        # Calculate `reach`
+                        reach = sum(
+                            1
+                            for s in self.P
+                            if np.dot(w_values, s) + c_value >= self.epsilon_P
+                        )
+                        print(f"Reach after time limit: {reach}")
+
+                        # Get the number of processed nodes
+                        node_count = (
+                            self.mdl.solution.progress.get_num_nodes_processed()
+                        )
+
+                        return int(obj_value), int(node_count), self.mdl
+                    except Exception as e:
+                        print(f"Error retrieving best solution after time limit: {e}")
+                        return None, None, None
+                else:
+                    print(f"No feasible solution found. Status code: {status}")
+                    return None, None, None
         except Exception as e:
-            print(f"Error solving model: {str(e)}")
+            print(f"Error during solving process: {e}")
             return None, None, None

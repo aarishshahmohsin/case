@@ -1,5 +1,3 @@
-import pandas as pd
-from sklearn.datasets import load_breast_cancer
 import numpy as np
 from constants import DATA_PATH
 import os
@@ -7,80 +5,10 @@ import os
 
 class Dataset:
     def __init__(self):
-        pass
+        self._extract()
 
-    def generate(self):
-        positive_mask = self.y == 1
-        negative_mask = self.y == 0
-        self.P = self.X[positive_mask]
-        self.N = self.X[negative_mask]
-        return self.P, self.N
-
-    def params(self):
-        self.lambda_param = (len(self.P) + 1) * self.theta1
-        self.theta = self.theta0 / self.theta1
-        return (self.theta0, self.theta1, self.theta, self.lambda_param)
-
-
-class BreastCancerDataset(Dataset):
-    def __init__(self):
-        d = load_breast_cancer()
-        self.X = d["data"]
-        self.y = d["target"]
-        self.theta0 = 99
-        self.theta1 = 100
-
-
-class WineQualityRedDataset(Dataset):
-    def __init__(self):
-        self.df = pd.read_csv(
-            str(os.path.join(DATA_PATH, "wine-quality/winequality-red.csv")),
-            delimiter=";",
-        )
-        self.X, self.y = (
-            self.df.drop(columns=["quality"]).to_numpy(),
-            self.df["quality"].to_numpy(),
-        )
-        self.y = (self.y >= 8).astype(int)
-        self.theta0 = 4
-        self.theta1 = 100
-
-
-class WineQualityWhiteDataset(Dataset):
-    def __init__(self):
-        self.df = pd.read_csv(
-            str(os.path.join(DATA_PATH, "wine-quality/winequality-white.csv")),
-            delimiter=";",
-        )
-        self.X, self.y = (
-            self.df.drop(columns=["quality"]).to_numpy(),
-            self.df["quality"].to_numpy(),
-        )
-        self.y = (self.y >= 8).astype(int)
-        self.theta0 = 10
-        self.theta1 = 100
-
-
-class SouthGermanCreditDataset(Dataset):
-    def __init__(self):
-        self.south_german_credit_df = pd.read_csv(
-            str(os.path.join(DATA_PATH, "south-german-credit/SouthGermanCredit.dat")),
-            skiprows=1,
-            header=None,
-            delimiter=" ",
-        )
-        self.X, self.y = (
-            self.south_german_credit_df.drop(columns=[6]).to_numpy(),
-            self.south_german_credit_df[6].to_numpy(),
-        )
-        self.theta0 = 90
-        self.theta1 = 100
-
-
-class CropMappingDataset(Dataset):
-    def __init__(self):
-        file_path = str(os.path.join(DATA_PATH, "crops/small-sample.dat"))
-        with open(file_path, "r") as file:
+    def _extract(self):
+        with open(self.file_path, "r") as file:
             lines = file.readlines()
         header = list(map(int, lines[0].split()))
         num_classes, num_negative_samples, num_positive_samples = header
@@ -103,5 +31,60 @@ class CropMappingDataset(Dataset):
 
         self.y = np.hstack([y_negative, y_positive])
 
+    def generate(self):
+        positive_mask = self.y == 1
+        negative_mask = self.y == 0
+        self.P = self.X[positive_mask]
+        self.N = self.X[negative_mask]
+        return self.P, self.N
+
+    def params(self):
+        self.lambda_param = (len(self.P) + 1) * self.theta1
+        self.theta = self.theta0 / self.theta1
+        return (self.theta0, self.theta1, self.theta, self.lambda_param)
+
+
+class BreastCancerDataset(Dataset):
+    def __init__(self):
+        self.file_path = str(os.path.join(DATA_PATH, "breast-cancer/wdbc.dat"))
+        super().__init__()
+        self.theta0 = 99
+        self.theta1 = 100
+
+
+class WineQualityRedDataset(Dataset):
+    def __init__(self):
+        self.file_path = str(
+            os.path.join(DATA_PATH, "wine-quality/winequality-red.dat")
+        )
+        super().__init__()
+        self.theta0 = 4
+        self.theta1 = 100
+
+
+class WineQualityWhiteDataset(Dataset):
+    def __init__(self):
+        self.file_path = str(
+            os.path.join(DATA_PATH, "wine-quality/winequality-white.dat")
+        )
+        super().__init__()
+        self.theta0 = 10
+        self.theta1 = 100
+
+
+class SouthGermanCreditDataset(Dataset):
+    def __init__(self):
+        self.file_path = str(
+            os.path.join(DATA_PATH, "south-german-credit/SouthGermanCredit.dat")
+        )
+        super().__init__()
+        self.theta0 = 90
+        self.theta1 = 100
+
+
+class CropMappingDataset(Dataset):
+    def __init__(self):
+        self.file_path = str(os.path.join(DATA_PATH, "crops/small-sample.dat"))
+        super().__init__()
         self.theta0 = 99
         self.theta1 = 100
