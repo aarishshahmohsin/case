@@ -1,14 +1,17 @@
 import numpy as np
 from scipy.special import factorial
+from utils import Dataset
+from constants import D_MAX
 
-D_MAX = 8
 
-
-class ClusterDataset:
+class ClusterDataset(Dataset):
     def __init__(self, n=400, d=8) -> None:
         self.n = n
         self.d = d
         self.s = (factorial(d) / factorial(D_MAX)) ** (1 / d)  # Side length of simplex
+        self.theta0 = 99
+        self.theta1 = 100
+        self._generate()
 
     def generate_hypercube_points(self, n, d):
         return np.random.uniform(0, 1, size=(n, d))
@@ -17,7 +20,7 @@ class ClusterDataset:
         points = np.random.dirichlet(np.ones(d), size=n)
         return points * s
 
-    def generate(self):
+    def _generate(self):
         n_negative = 4 * self.n // 5
         n_positive_simplex = self.n // 10
         n_positive_remaining = self.n // 10
@@ -32,15 +35,13 @@ class ClusterDataset:
             n_positive_remaining, self.d
         )
 
-        X = np.vstack(
+        self.X = np.vstack(
             (negative_points, positive_simplex_points, positive_remaining_points)
         )
 
-        y = np.hstack(
+        self.y = np.hstack(
             (np.zeros(n_negative), np.ones(n_positive_simplex + n_positive_remaining))
         )
-
-        return X, y
 
 
 class TwoClusterDataset:
@@ -48,6 +49,9 @@ class TwoClusterDataset:
         self.n = n
         self.d = d
         self.s = (factorial(d) / factorial(D_MAX)) ** (1 / d)  # Side length of simplex
+        self.theta0 = 99
+        self.theta1 = 100
+        self._generate()
 
     def generate_hypercube_points(self, n, d):
         return np.random.uniform(0, 1, size=(n, d))
@@ -61,7 +65,7 @@ class TwoClusterDataset:
         points = points * s
         return np.ones(d) - points
 
-    def generate(self):
+    def _generate(self):
         n_negative = 4 * self.n // 5
         n_positive_simplex = self.n // 20
         n_positive_simplex_opp = self.n // 20
@@ -80,7 +84,7 @@ class TwoClusterDataset:
             n_positive_remaining, self.d
         )
 
-        X = np.vstack(
+        self.X = np.vstack(
             (
                 negative_points,
                 positive_simplex_points,
@@ -89,7 +93,7 @@ class TwoClusterDataset:
             )
         )
 
-        y = np.hstack(
+        self.y = np.hstack(
             (
                 np.zeros(n_negative),
                 np.ones(
@@ -98,32 +102,30 @@ class TwoClusterDataset:
             )
         )
 
-        return X, y
 
-
-class DiffusedBenchmark:
+class DiffusedBenchmark(Dataset):
     def __init__(self, n=400, d=8) -> None:
         self.n = n
         self.d = d
+        self.theta0 = 99
+        self.theta1 = 100
+        self._generate()
 
     def generate_hypercube_points(self, n, d):
         return np.random.uniform(0, 1, size=(n, d))
 
-    def generate(self):
+    def _generate(self):
         n_negative = self.n // 2
         n_positive = self.n // 2
 
         negative_points = self.generate_hypercube_points(n_negative, self.d)
         positive_points = self.generate_hypercube_points(n_positive, self.d)
 
-        X = np.vstack((negative_points, positive_points))
-
-        y = np.hstack((np.zeros(n_negative), np.ones(n_positive)))
-
-        return X, y
+        self.X = np.vstack((negative_points, positive_points))
+        self.y = np.hstack((np.zeros(n_negative), np.ones(n_positive)))
 
 
-class PrismDataset:
+class PrismDataset(Dataset):
     def __init__(self, n=400, d=11, f=8, p_mode="P"):
         """
         Parameters:
@@ -132,6 +134,10 @@ class PrismDataset:
         f (float): Factor controlling negatives per positive (default: 8).
         p_mode (str): Positive sample mode, "P" (default) or "P/4".
         """
+
+        self.theta0 = 99
+        self.theta1 = 100
+
         self.n = n
         self.d = d
         self.f = f
@@ -151,10 +157,11 @@ class PrismDataset:
 
         # Calculate d0 based on factorial constraints
         self.d0 = self._compute_d0()
-        print("self.d0", self.d0)
+        print(self.d0)
 
         # Side length of the simplex
         self.s = (self.v * factorial(self.d0)) ** (1 / self.d0)
+        self._generate()
 
     def _compute_d0(self):
         """Calculate d0 based on |N| / (p * f)."""
@@ -172,14 +179,12 @@ class PrismDataset:
         return np.random.uniform(0, 1, size=(n, d))
 
     def generate_prism_points(self, n, d, d0, s):
-        """
-        Generate points within a d0-dimensional simplex and extend to d dimensions.
-        """
-        simplex_points = np.random.dirichlet(np.ones(d0), size=n) * s
+        k = np.random.exponential(scale=s, size=(n, d0))
+        P = k / sum(k)
         padding = np.random.uniform(0, 1, size=(n, d - d0))  # Random padding
-        return np.hstack((simplex_points, padding))
+        return np.hstack((P, padding))
 
-    def generate(self):
+    def _generate(self):
         """
         Generate the Prism dataset.
 
@@ -214,7 +219,7 @@ class PrismDataset:
         )
 
         # Combine into dataset
-        X = np.vstack(
+        self.X = np.vstack(
             (
                 negative_prism_points,
                 negative_hypercube_points,
@@ -222,7 +227,7 @@ class PrismDataset:
                 positive_hypercube_points,
             )
         )
-        y = np.hstack(
+        self.y = np.hstack(
             (
                 np.zeros(n_negative_prism + n_negative_hypercube),
                 np.ones(n_positive_prism + n_positive_hypercube),
@@ -230,11 +235,9 @@ class PrismDataset:
         )
 
         # Count of each type
-        sample_counts = {
-            "positive_in_prism": n_positive_prism,
-            "positive_not_in_prism": n_positive_hypercube,
-            "negative_in_prism": n_negative_prism,
-            "negative_not_in_prism": n_negative_hypercube,
-        }
-
-        return X, y, sample_counts
+        # sample_counts = {
+        #     "positive_in_prism": n_positive_prism,
+        #     "positive_not_in_prism": n_positive_hypercube,
+        #     "negative_in_prism": n_negative_prism,
+        #     "negative_not_in_prism": n_negative_hypercube,
+        # }
