@@ -1,6 +1,6 @@
 import gurobipy as grb
 from gurobipy import GRB
-from docplex.mp.model import Model
+import cplex
 import numpy as np
 from constants import (
     RAM_LIMIT,
@@ -40,35 +40,20 @@ class GurobiSolver:
             self.mdl.setParam("MemLimit", RAM_LIMIT)
         # self.mdl.setParam(GRB.Param.MIPGap, 0.01)  # gap
         # self.mdl.setParam(GRB.Param.Heuristics, 0)
-        self.mdl.setParam(GRB.Param.NodeMethod, 2)
+        # self.mdl.setParam(GRB.Param.NodeMethod, 2)
         #
 
     def build_model(self):
-        print("aarish", self.theta, self.lambda_param)
         d = self.P.shape[1]
         num_P = len(self.P)
         num_N = len(self.N)
 
         # Decision variables
-        self.x_vars = self.mdl.addVars(
-            num_P, lb=0, ub=1, vtype=grb.GRB.BINARY, name="x"
-        )
-        self.y_vars = self.mdl.addVars(
-            num_N, lb=0, ub=1, vtype=grb.GRB.BINARY, name="y"
-        )
+        self.x_vars = self.mdl.addVars(num_P, vtype=grb.GRB.BINARY, name="x")
+        self.y_vars = self.mdl.addVars(num_N, vtype=grb.GRB.BINARY, name="y")
         self.w = self.mdl.addVars(d, vtype=grb.GRB.CONTINUOUS, name="w")
         self.c = self.mdl.addVar(vtype=grb.GRB.CONTINUOUS, name="c")
-        self.V = self.mdl.addVar(
-            vtype=grb.GRB.CONTINUOUS,
-            lb=0,
-            # ub=grb.GRB.INFINITY,
-            name="V",
-            # obj=-self.lambda_param,
-        )
-
-        # self.lambda_param = self.mdl.addVar(
-        #     vtype=grb.GRB.CONTINUOUS, lb=0, ub=grb.GRB.INFINITY, name="lambda"
-        # )
+        self.V = self.mdl.addVar(vtype=grb.GRB.CONTINUOUS, name="V")
 
         # Regularization constraint based on Equation 4
         self.mdl.addConstr(
@@ -77,8 +62,7 @@ class GurobiSolver:
             + self.theta * grb.quicksum(self.y_vars[i] for i in range(num_N))
             + self.theta * self.epsilon_R
         )
-        self.mdl.update()
-        # self.mdl.addConstr(self.V >= 0)
+        self.mdl.addConstr(self.V >= 0)
 
         # Positive class constraints
         for i, s in enumerate(self.P):
@@ -96,7 +80,7 @@ class GurobiSolver:
         objective = (
             grb.quicksum(self.x_vars[i] for i in range(num_P))
             - self.lambda_param * self.V
-        )            "X": [x[d].x for d in range(len(P))],
+        )
         self.mdl.setObjective(objective, grb.GRB.MAXIMIZE)
 
     def solve(self):
@@ -104,10 +88,7 @@ class GurobiSolver:
         self.mdl.optimize()
 
         if self.mdl.status in [grb.GRB.OPTIMAL, grb.GRB.TIME_LIMIT]:
-            self.mdl.write("final_solution.lp")
             node_count = self.mdl.NodeCount
-
-            print([self.x_vars[i].x for i in range(len(self.P))])
 
             if self.mdl.status == grb.GRB.OPTIMAL:
                 reach = np.sum([self.x_vars[i].x for i in range(len(self.P))])
@@ -136,9 +117,6 @@ class CplexSolver:
         eps_P=epsilon_P,
         eps_N=epsilon_N,
         lambda_param,
-        PRINT_OUTPUT=True,
-        TIME_LIMIT=None,
-        RAM_LIMIT=None,
     ):
         self.P = P
         self.N = N
@@ -147,64 +125,103 @@ class CplexSolver:
         self.epsilon_P = eps_P
         self.epsilon_N = eps_N
         self.lambda_param = lambda_param
-        self.model = Model(name="Wide-Reach_Classification")
-
+        self.mdl = cplex.Cplex()
         if not PRINT_OUTPUT:
-            self.model.set_log_output(None)
-
+            self.mdl.set_log_stream(None)
+            self.mdl.set_error_stream(None)
+            self.mdl.set_warning_stream(None)
+            self.mdl.set_results_stream(None)
         if TIME_LIMIT:
-            self.model.set_time_limit(TIME_LIMIT)
+            self.mdl.parameters.timelimit.set(TIME_LIMIT)
         if RAM_LIMIT:
-            self.model.parameters.workmem = RAM_LIMIT
+            self.mdl.parameters.workmem.set(RAM_LIMIT)
 
     def build_model(self):
         d = self.P.shape[1]
         num_P = len(self.P)
         num_N = len(self.N)
 
-        # Decision variables
-        x_vars = self.model.binary_var_list(num_P, name="x")
-        y_vars = self.model.binary_var_list(num_N, name="y")
-        w_vars = self.model.continuous_var_list(d, name="w")
-        c_var = self.model.continuous_var(name="c")
-        V_var = self.model.continuous_var(lb=0, name="V")
+        # Variables
+        self.x_vars = [f"x_{i}" for i in range(num_P)]
+        self.y_vars = [f"y_{i}" for i in range(num_N)]
+        self.w_vars = [f"w_{j}" for j in range(d)]
+        self.c_var = "c"
+        self.V_var = "V"
 
-        # Regularization constraint
-        self.model.add_constraint(
-            V_var
-            >= (self.theta - 1) * self.model.sum(x_vars)
-            + self.theta * self.model.sum(y_vars)
-            + self.theta * self.epsilon_R
+        # Add variables
+        self.mdl.variables.add(names=self.x_vars, types="B" * num_P)
+        self.mdl.variables.add(names=self.y_vars, types="B" * num_N)
+        self.mdl.variables.add(names=self.w_vars, types="C" * d)
+        self.mdl.variables.add(names=[self.c_var], types="C")
+        self.mdl.variables.add(names=[self.V_var], types="C", lb=[0.0])
+
+        # Regularization constraint based on Equation 4
+        regularization_indices = [self.V_var] + self.x_vars + self.y_vars
+        regularization_values = (
+            [1.0] + [(self.theta - 1)] * num_P + [self.theta] * num_N
+        )
+        self.mdl.linear_constraints.add(
+            lin_expr=[
+                cplex.SparsePair(ind=regularization_indices, val=regularization_values)
+            ],
+            senses=["G"],
+            rhs=[self.theta * self.epsilon_R],
         )
 
         # Positive class constraints
         for i, s in enumerate(self.P):
-            dot_product = self.model.sum(s[j] * w_vars[j] for j in range(d))
-            self.model.add_constraint(
-                x_vars[i] <= 1 + dot_product - c_var - self.epsilon_P
+            indices = [self.x_vars[i]] + self.w_vars + [self.c_var]
+            values = [1.0] + [-v for v in s] + [1.0]
+            self.mdl.linear_constraints.add(
+                lin_expr=[cplex.SparsePair(ind=indices, val=values)],
+                senses=["L"],
+                rhs=[1 - self.epsilon_P],
             )
 
         # Negative class constraints
         for i, s in enumerate(self.N):
-            dot_product = self.model.sum(s[j] * w_vars[j] for j in range(d))
-            self.model.add_constraint(y_vars[i] >= dot_product - c_var + self.epsilon_N)
+            indices = [self.y_vars[i]] + self.w_vars + [self.c_var]
+            values = [1.0] + list(s) + [-1.0]
+            self.mdl.linear_constraints.add(
+                lin_expr=[cplex.SparsePair(ind=indices, val=values)],
+                senses=["G"],
+                rhs=[self.epsilon_N],
+            )
 
         # Objective function
-        objective = self.model.sum(x_vars) - self.lambda_param * V_var
-        self.model.maximize(objective)
+        obj = [1.0] * num_P + [0.0] * num_N + [0.0] * d + [0.0, -self.lambda_param]
+        self.mdl.objective.set_linear(
+            list(
+                zip(
+                    self.x_vars + self.y_vars + self.w_vars + [self.c_var, self.V_var],
+                    obj,
+                )
+            )
+        )
+        self.mdl.objective.set_sense(self.mdl.objective.sense.maximize)
 
     def solve(self):
         self.build_model()
-        solution = self.model.solve()
+        self.mdl.solve()
 
-        if solution:
-            reach = sum(solution.get_value(f"x_{i}") for i in range(len(self.P)))
-            best_obj = solution.get_objective_value()
-            node_count = self.model.get_solve_details().nb_nodes_processed
+        status = self.mdl.solution.get_status()
+
+        if status in [
+            self.mdl.solution.status.MIP_optimal,
+            self.mdl.solution.status.MIP_feasible,
+        ]:
+            x_values = self.mdl.solution.get_values(self.x_vars)
+            reach = sum(
+                int(x > 0.5) for x in x_values
+            )  # Count positive correctly classified
+            node_count = self.mdl.solution.progress.get_num_nodes_processed()
+            return reach, int(node_count), self.mdl
+        elif status == self.mdl.solution.status.abort_time_limit:
+            print("Best feasible solution found within the time limit.")
+            x_values = self.mdl.solution.get_values(self.x_vars)
+            reach = sum(int(x > 0.5) for x in x_values)
+            node_count = self.mdl.solution.progress.get_num_nodes_processed()
+            return reach, int(node_count), self.mdl
         else:
-            print("No feasible or optimal solution found. Returning default values.")
-            reach = 0
-            best_obj = 0
-            node_count = 0
-
-        return reach, int(node_count), best_obj
+            print("No feasible solution found.")
+            return None, None, None

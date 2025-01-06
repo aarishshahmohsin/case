@@ -44,7 +44,7 @@ class ClusterDataset(Dataset):
         )
 
 
-class TwoClusterDataset:
+class TwoClusterDataset(Dataset):
     def __init__(self, n=400, d=8) -> None:
         self.n = n
         self.d = d
@@ -200,8 +200,8 @@ class PrismDataset(Dataset):
         n_positive_hypercube = self.n_positive - n_positive_prism
 
         # Negative samples
-        n_negative_prism = int(self.n_negative * self.v)
-        n_negative_hypercube = self.n_negative - n_negative_prism
+        # n_negative_prism = int(self.n_negative * self.v)
+        n_negative_hypercube = self.n_negative
 
         # Generate samples
         positive_prism_points = self.generate_prism_points(
@@ -210,10 +210,10 @@ class PrismDataset(Dataset):
         positive_hypercube_points = self.generate_hypercube_points(
             n_positive_hypercube, self.d
         )
-
-        negative_prism_points = self.generate_prism_points(
-            n_negative_prism, self.d, self.d0, self.s
-        )
+        #
+        # negative_prism_points = self.generate_prism_points(
+        #     n_negative_prism, self.d, self.d0, self.s
+        # )
         negative_hypercube_points = self.generate_hypercube_points(
             n_negative_hypercube, self.d
         )
@@ -221,7 +221,7 @@ class PrismDataset(Dataset):
         # Combine into dataset
         self.X = np.vstack(
             (
-                negative_prism_points,
+                # negative_prism_points,
                 negative_hypercube_points,
                 positive_prism_points,
                 positive_hypercube_points,
@@ -229,7 +229,7 @@ class PrismDataset(Dataset):
         )
         self.y = np.hstack(
             (
-                np.zeros(n_negative_prism + n_negative_hypercube),
+                np.zeros(n_negative_hypercube),
                 np.ones(n_positive_prism + n_positive_hypercube),
             )
         )

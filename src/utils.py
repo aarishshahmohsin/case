@@ -38,8 +38,8 @@ class Dataset:
         return self.P, self.N
 
     def params(self):
-        self.lambda_param = (len(self.P) + 1) * self.theta1
         self.theta = self.theta0 / self.theta1
+        self.lambda_param = (len(self.P) + 1) / self.theta
         return (self.theta0, self.theta1, self.theta, self.lambda_param)
 
 
