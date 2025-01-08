@@ -1,210 +1,225 @@
-import gurobipy as grb
-from gurobipy import GRB
-from docplex.mp.model import Model
 import numpy as np
+from gurobipy import Model as GurobiModel, GRB, Env
+from docplex.mp.model import Model as CplexModel
+import time
+import gc
+
 from constants import (
-    RAM_LIMIT,
+    epsilon_N as eps_N,
+    epsilon_P as eps_P,
+    epsilon_R as eps_R,
     TIME_LIMIT,
     PRINT_OUTPUT,
-    epsilon_R,
-    epsilon_N,
-    epsilon_P,
+    RAM_LIMIT,
 )
 
 
-class GurobiSolver:
-    def __init__(
-        self,
-        *,
-        P,
-        N,
-        theta,
-        eps_R=epsilon_R,
-        eps_P=epsilon_P,
-        eps_N=epsilon_N,
-        lambda_param,
-    ):
-        self.P = P
-        self.N = N
-        self.theta = theta
-        self.epsilon_R = eps_R
-        self.epsilon_P = eps_P
-        self.epsilon_N = eps_N
-        self.lambda_param = lambda_param
-        self.mdl = grb.Model("Wide-Reach_Classification")
-        if not PRINT_OUTPUT:
-            self.mdl.setParam("OutputFlag", 0)
-        if TIME_LIMIT:
-            self.mdl.setParam("TimeLimit", TIME_LIMIT)
-        if RAM_LIMIT:
-            self.mdl.setParam("MemLimit", RAM_LIMIT)
-        # self.mdl.setParam(GRB.Param.MIPGap, 0.01)  # gap
-        # self.mdl.setParam(GRB.Param.Heuristics, 0)
-        self.mdl.setParam(GRB.Param.NodeMethod, 2)
-        #
+def gurobi_solver(
+    *, theta, P, N, epsilon_P=eps_P, epsilon_N=eps_N, epsilon_R=eps_R, lambda_param=None
+):
+    """
+    Solves the wide-reach classification problem for given positive and negative samples.
 
-    def build_model(self):
-        print("aarish", self.theta, self.lambda_param)
-        d = self.P.shape[1]
-        num_P = len(self.P)
-        num_N = len(self.N)
+    Parameters:
+        theta (float): Precision threshold.
+        P (numpy.ndarray): Feature matrix of positive samples (n_positive, n_features).
+        N (numpy.ndarray): Feature matrix of negative samples (n_negative, n_features).
 
-        # Decision variables
-        self.x_vars = self.mdl.addVars(
-            num_P, lb=0, ub=1, vtype=grb.GRB.BINARY, name="x"
-        )
-        self.y_vars = self.mdl.addVars(
-            num_N, lb=0, ub=1, vtype=grb.GRB.BINARY, name="y"
-        )
-        self.w = self.mdl.addVars(d, vtype=grb.GRB.CONTINUOUS, name="w")
-        self.c = self.mdl.addVar(vtype=grb.GRB.CONTINUOUS, name="c")
-        self.V = self.mdl.addVar(
-            vtype=grb.GRB.CONTINUOUS,
-            lb=0,
-            # ub=grb.GRB.INFINITY,
-            name="V",
-            # obj=-self.lambda_param,
-        )
+    Returns:
+        dict: Contains the reach, hyperplane parameters, bias, and precision violation, or an error message.
+    """
+    X = np.vstack((P, N))
 
-        # self.lambda_param = self.mdl.addVar(
-        #     vtype=grb.GRB.CONTINUOUS, lb=0, ub=grb.GRB.INFINITY, name="lambda"
-        # )
+    # Update indices for P and N after combining
+    num_positive = P.shape[0]
+    P_indices = range(num_positive)
+    N_indices = range(num_positive, X.shape[0])
 
-        # Regularization constraint based on Equation 4
-        self.mdl.addConstr(
-            self.V
-            >= (self.theta - 1) * grb.quicksum(self.x_vars[i] for i in range(num_P))
-            + self.theta * grb.quicksum(self.y_vars[i] for i in range(num_N))
-            + self.theta * self.epsilon_R
-        )
-        self.mdl.update()
-        # self.mdl.addConstr(self.V >= 0)
+    # Parameters
+    if not lambda_param:
+        lambda_param = (num_positive + 1) / theta
 
-        # Positive class constraints
-        for i, s in enumerate(self.P):
-            dot_product = grb.quicksum(s[j] * self.w[j] for j in range(d))
-            self.mdl.addConstr(
-                self.x_vars[i] <= 1 + dot_product - self.c - self.epsilon_P
-            )
+    # Create the Gurobi model
+    model = GurobiModel("Wide-Reach Classification")
+    env = Env()
 
-        # Negative class constraints
-        for i, s in enumerate(self.N):
-            dot_product = grb.quicksum(s[j] * self.w[j] for j in range(d))
-            self.mdl.addConstr(self.y_vars[i] >= dot_product - self.c + self.epsilon_N)
+    if TIME_LIMIT:
+        model.setParam("TimeLimit", 120)
+    if not PRINT_OUTPUT:
+        model.setParam("OutputFlag", 0)
+    if RAM_LIMIT:
+        model.setParam("MemLimit", 4096)
 
-        # Objective function
-        objective = (
-            grb.quicksum(self.x_vars[i] for i in range(num_P))
-            - self.lambda_param * self.V
-        )            "X": [x[d].x for d in range(len(P))],
-        self.mdl.setObjective(objective, grb.GRB.MAXIMIZE)
+    # Decision variables
+    x = model.addVars(num_positive, vtype=GRB.BINARY, name="x")
+    y = model.addVars(len(N_indices), vtype=GRB.BINARY, name="y")
+    w = model.addVars(X.shape[1], lb=-GRB.INFINITY, name="w")
+    c = model.addVar(lb=-GRB.INFINITY, name="c")
+    V = model.addVar(lb=0, name="V")
 
-    def solve(self):
-        self.build_model()
-        self.mdl.optimize()
+    # Objective: Maximize the reach minus penalty for precision violation
+    model.setObjective(sum(x[i] for i in P_indices) - lambda_param * V, GRB.MAXIMIZE)
 
-        if self.mdl.status in [grb.GRB.OPTIMAL, grb.GRB.TIME_LIMIT]:
-            self.mdl.write("final_solution.lp")
-            node_count = self.mdl.NodeCount
+    # Constraint: Precision constraint violation
+    model.addConstr(
+        V
+        >= (theta - 1) * sum(x[i] for i in P_indices)
+        + theta * sum(y[j] for j in range(len(N_indices)))
+        + theta * epsilon_R,
+        "PrecisionConstraint",
+    )
 
-            print([self.x_vars[i].x for i in range(len(self.P))])
-
-            if self.mdl.status == grb.GRB.OPTIMAL:
-                reach = np.sum([self.x_vars[i].x for i in range(len(self.P))])
-            else:
-                reach = np.sum([self.x_vars[i].x for i in range(len(self.P))])
-            best_obj = self.mdl.ObjVal
-        else:
-            print(
-                "No feasible or optimal solution found. Returning best solution found."
-            )
-            node_count = self.mdl.NodeCount
-            reach = np.sum([self.x_vars[i].getAttr("x") for i in range(len(self.P))])
-            best_obj = self.mdl.ObjVal
-
-        return reach, int(node_count), best_obj
-
-
-class CplexSolver:
-    def __init__(
-        self,
-        *,
-        P,
-        N,
-        theta,
-        eps_R=epsilon_R,
-        eps_P=epsilon_P,
-        eps_N=epsilon_N,
-        lambda_param,
-        PRINT_OUTPUT=True,
-        TIME_LIMIT=None,
-        RAM_LIMIT=None,
-    ):
-        self.P = P
-        self.N = N
-        self.theta = theta
-        self.epsilon_R = eps_R
-        self.epsilon_P = eps_P
-        self.epsilon_N = eps_N
-        self.lambda_param = lambda_param
-        self.model = Model(name="Wide-Reach_Classification")
-
-        if not PRINT_OUTPUT:
-            self.model.set_log_output(None)
-
-        if TIME_LIMIT:
-            self.model.set_time_limit(TIME_LIMIT)
-        if RAM_LIMIT:
-            self.model.parameters.workmem = RAM_LIMIT
-
-    def build_model(self):
-        d = self.P.shape[1]
-        num_P = len(self.P)
-        num_N = len(self.N)
-
-        # Decision variables
-        x_vars = self.model.binary_var_list(num_P, name="x")
-        y_vars = self.model.binary_var_list(num_N, name="y")
-        w_vars = self.model.continuous_var_list(d, name="w")
-        c_var = self.model.continuous_var(name="c")
-        V_var = self.model.continuous_var(lb=0, name="V")
-
-        # Regularization constraint
-        self.model.add_constraint(
-            V_var
-            >= (self.theta - 1) * self.model.sum(x_vars)
-            + self.theta * self.model.sum(y_vars)
-            + self.theta * self.epsilon_R
+    # Constraints: Classification constraints for positive samples
+    for i, p_idx in enumerate(P_indices):
+        model.addConstr(
+            x[i]
+            <= 1 + sum(w[d] * X[p_idx, d] for d in range(X.shape[1])) - c - epsilon_P,
+            name=f"Positive_{i}",
         )
 
-        # Positive class constraints
-        for i, s in enumerate(self.P):
-            dot_product = self.model.sum(s[j] * w_vars[j] for j in range(d))
-            self.model.add_constraint(
-                x_vars[i] <= 1 + dot_product - c_var - self.epsilon_P
-            )
+    # Constraints: Classification constraints for negative samples
+    for j, n_idx in enumerate(N_indices):
+        model.addConstr(
+            y[j] >= sum(w[d] * X[n_idx, d] for d in range(X.shape[1])) - c + epsilon_N,
+            name=f"Negative_{j}",
+        )
 
-        # Negative class constraints
-        for i, s in enumerate(self.N):
-            dot_product = self.model.sum(s[j] * w_vars[j] for j in range(d))
-            self.model.add_constraint(y_vars[i] >= dot_product - c_var + self.epsilon_N)
+    # Solve the model
+    start_time = time.time()
+    model.optimize()
+    end_time = time.time()
 
-        # Objective function
-        objective = self.model.sum(x_vars) - self.lambda_param * V_var
-        self.model.maximize(objective)
+    # Check and return results
+    if model.status == GRB.OPTIMAL or model.status == GRB.TIME_LIMIT:
+        results = {
+            "Reach": sum(x[i].x for i in P_indices),
+            "Hyperplane w": [w[d].x for d in range(X.shape[1])],
+            "Bias c": c.x,
+            "X": [x[d].x for d in range(len(P))],
+            "Y": [y[d].x for d in range(len(N))],
+            "Precision Violation V": V.x,
+            "Node Count": model.NodeCount,
+            "Time taken": end_time - start_time,
+        }
+        # return results
+    else:
+        results = {"Error": "No optimal solution found."}
 
-    def solve(self):
-        self.build_model()
-        solution = self.model.solve()
+    # dispose everything
+    model.dispose()
+    env.dispose()
 
-        if solution:
-            reach = sum(solution.get_value(f"x_{i}") for i in range(len(self.P)))
-            best_obj = solution.get_objective_value()
-            node_count = self.model.get_solve_details().nb_nodes_processed
-        else:
-            print("No feasible or optimal solution found. Returning default values.")
-            reach = 0
-            best_obj = 0
-            node_count = 0
+    del model
+    del env
 
-        return reach, int(node_count), best_obj
+    gc.collect()
+
+    return results
+
+
+def cplex_solver(
+    *, theta, P, N, epsilon_P=eps_P, epsilon_N=eps_N, epsilon_R=eps_R, lambda_param=None
+):
+    """
+    Solves the wide-reach classification problem using DOcplex for given positive and negative samples.
+
+    Parameters:
+        theta (float): Precision threshold.
+        P (numpy.ndarray): Feature matrix of positive samples (n_positive, n_features).
+        N (numpy.ndarray): Feature matrix of negative samples (n_negative, n_features).
+
+    Returns:
+        dict: Contains the reach, hyperplane parameters, bias, and precision violation, or an error message.
+    """
+    X = np.vstack((P, N))
+
+    # Update indices for P and N after combining
+    num_positive = P.shape[0]
+    P_indices = range(num_positive)
+    N_indices = range(num_positive, X.shape[0])
+
+    # Parameters
+    if not lambda_param:
+        lambda_param = (num_positive + 1) / theta
+
+    # Create the DOcplex model
+    model = CplexModel(name="Wide-Reach Classification")
+
+    if not PRINT_OUTPUT:
+        model.set_log_output(None)
+        model.set_log_output_as_stream(None)
+        model.parameters.mip.display.set(0)
+        model.context.cplex_parameters.read.datacheck = 0
+        model.context.solver.log_output = False
+        model.parameters.mip.display = 0
+
+    if TIME_LIMIT:
+        model.set_time_limit(time_limit=TIME_LIMIT)
+    if RAM_LIMIT:
+        model.parameters.workmem = 4096
+
+    # Decision variables
+    x = model.binary_var_list(num_positive, name="x")
+    y = model.binary_var_list(len(N_indices), name="y")
+    w = model.continuous_var_list(X.shape[1], lb=-model.infinity, name="w")
+    c = model.continuous_var(lb=-model.infinity, name="c")
+    V = model.continuous_var(lb=0, name="V")
+
+    # Objective: Maximize the reach minus penalty for precision violation
+    model.maximize(model.sum(x[i] for i in P_indices) - lambda_param * V)
+
+    # Constraint: Precision constraint violation
+    model.add_constraint(
+        V
+        >= (theta - 1) * model.sum(x[i] for i in P_indices)
+        + theta * model.sum(y[j] for j in range(len(N_indices)))
+        + theta * epsilon_R,
+        ctname="PrecisionConstraint",
+    )
+
+    # Constraints: Classification constraints for positive samples
+    for i, p_idx in enumerate(P_indices):
+        model.add_constraint(
+            x[i]
+            <= 1
+            + model.sum(w[d] * X[p_idx, d] for d in range(X.shape[1]))
+            - c
+            - epsilon_P,
+            ctname=f"Positive_{i}",
+        )
+
+    # Constraints: Classification constraints for negative samples
+    for j, n_idx in enumerate(N_indices):
+        model.add_constraint(
+            y[j]
+            >= model.sum(w[d] * X[n_idx, d] for d in range(X.shape[1])) - c + epsilon_N,
+            ctname=f"Negative_{j}",
+        )
+
+    # Solve the model
+    start_time = time.time()
+    solution = model.solve(log_output=True)
+    end_time = time.time()
+
+    # Check and return results
+    if solution:
+        results = {
+            "Reach": sum(solution.get_value(x[i]) for i in P_indices),
+            "Hyperplane w": [solution.get_value(w[d]) for d in range(X.shape[1])],
+            "Bias c": solution.get_value(c),
+            "X": [solution.get_value(x[d]) for d in range(len(P))],
+            "Y": [solution.get_value(y[d]) for d in range(len(N))],
+            "Precision Violation V": solution.get_value(V),
+            "Node Count": model.get_solve_details().nb_nodes_processed,
+            "Time taken": end_time - start_time,
+        }
+    else:
+        results = {"Error": "No optimal solution found."}
+
+    # dispose
+    model.end()
+    del model
+
+    gc.collect()
+
+    return results

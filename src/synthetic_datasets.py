@@ -1,5 +1,7 @@
 import numpy as np
+import math
 from scipy.special import factorial
+from scipy.stats import rayleigh, maxwell
 from utils import Dataset
 from constants import D_MAX
 
@@ -241,3 +243,139 @@ class PrismDataset(Dataset):
         #     "negative_in_prism": n_negative_prism,
         #     "negative_not_in_prism": n_negative_hypercube,
         # }
+
+
+class L1PrismDataset(Dataset):
+    def __init__(self, n=400, d=11, f=8, p_mode="P", d0=2):
+        """
+        Parameters:
+        n (int): Total number of samples (default: 400).
+        d (int): Dimension of the dataset (default: 11).
+        f (float): Factor controlling negatives per positive (default: 8).
+        p_mode (str): Positive sample mode, "P" (default) or "P/4".
+        """
+
+        self.theta0 = 99
+        self.theta1 = 100
+
+        self.n = n
+        self.d = d
+        self.f = f
+        self.p_mode = p_mode
+
+        # Total number of positive and negative samples
+        self.n_positive = n // 5
+        self.n_negative = n - self.n_positive
+
+        self.d0 = d0
+
+        self._generate()
+
+    def calculate_params(P, N, d=11, f=8, s=1):
+        """
+        Calculate parameters for the prism and multivariate normal models.
+
+        Parameters:
+            P (int): Number of positive samples.
+            N (int): Number of negative samples.
+            d (int): Dimension (default: 11).
+            f (float): Ratio of negatives to positives (default: 8).
+            s (float): Maximum length constraint for the positives (default: 1).
+
+        Returns:
+            dict: Dictionary containing calculated parameters.
+        """
+        results = {}
+
+        # Multivariate normal calculations (d0 = 2 and d0 = 3)
+        def rayleigh_cdf(r, sigma):
+            return rayleigh.cdf(r, scale=sigma)
+
+        def maxwell_cdf(r, sigma):
+            return maxwell.cdf(r, scale=sigma)
+
+        # Calculate r for d0 = 2
+        def calculate_r_d0_2(sigma, f, N, P):
+            pdf_val = rayleigh.pdf(1, sigma)
+            if pdf_val == 0:
+                return s  # Return max constraint if division is invalid
+            r = math.sqrt(
+                (4 * f * P * rayleigh.cdf(s, sigma)) / (math.pi * N * pdf_val)
+            )
+            return min(r, s)  # Ensure r <= s
+
+        # Calculate r for d0 = 3
+        def calculate_r_d0_3(sigma, f, N, P):
+            pdf_val = maxwell.pdf(1, sigma)
+            if pdf_val == 0:
+                return s  # Return max constraint if division is invalid
+            r = ((6 * f * P * maxwell.cdf(s, sigma)) / (math.pi * N * pdf_val)) ** (
+                1 / 3
+            )
+            return min(r, s)  # Ensure r <= s
+
+        sigma_2 = 1  # Initialize sigma for d0 = 2
+        sigma_3 = 1  # Initialize sigma for d0 = 3
+
+        r_2 = calculate_r_d0_2(sigma_2, f, N, P)
+        r_3 = calculate_r_d0_3(sigma_3, f, N, P)
+
+        results["multivariate_normal"] = {
+            "2": {
+                "sigma": sigma_2,
+                "r": r_2,
+                "density": (
+                    (rayleigh_cdf(r_2, sigma_2) / rayleigh_cdf(1, sigma_2))
+                    / (math.pi * r_2**2)
+                    if r_2 > 0
+                    else None
+                ),
+                "s": s,
+            },
+            "3": {
+                "sigma": sigma_3,
+                "r": r_3,
+                "density": (
+                    (maxwell_cdf(r_3, sigma_3) / maxwell_cdf(1, sigma_3))
+                    / ((4 / 3) * math.pi * r_3**3)
+                    if r_3 > 0
+                    else None
+                ),
+                "s": s,
+            },
+        }
+
+        return results
+
+    def _generate(self):
+        params = self.calculate_params(self.n_positive, self.n_negative, f=8, s=1)
+
+        sigma = params["multivariate_normal"][str(self.d0)]["sigma"]
+        r = params["multivariate_normal"][str(self.d0)]["r"]
+
+        def generate_positive_samples(P_size, d, d0, sigma, r):
+            samples = []
+            while len(samples) < P_size:
+                point = np.random.normal(loc=0, scale=sigma, size=d0)
+                length = np.linalg.norm(point, ord=1)
+                if length <= r and np.all(point >= 0):
+                    full_point = np.zeros(d)
+                    full_point[:d0] = point
+                    samples.append(full_point)
+            return np.array(samples)
+
+        def generate_negative_samples(N_size, d, d0, s):
+            samples = []
+            while len(samples) < N_size:
+                point = np.random.uniform(low=0, high=s, size=d0)
+                if np.sum(point) <= s:
+                    full_point = np.zeros(d)
+                    full_point[:d0] = point
+                    samples.append(full_point)
+            return np.array(samples)
+
+        P = generate_positive_samples(self.n_positive, self.d, self.d0, sigma, r)
+        N = generate_negative_samples(self.n_negative, self.d, self.d0, 1)
+
+        self.X = np.vstack((P, N))
+        self.y = np.hstack((np.ones(self.n_positive), np.zeros(self.n_negative)))
