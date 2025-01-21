@@ -17,8 +17,8 @@ class WineQualityRedDataset(Dataset):
             os.path.join(DATA_PATH, "wine-quality/winequality-red.dat")
         )
         super().__init__()
-        self.theta0 = 4
-        self.theta1 = 100
+        self.theta0 = 1
+        self.theta1 = 25
 
 
 class WineQualityWhiteDataset(Dataset):
@@ -27,8 +27,8 @@ class WineQualityWhiteDataset(Dataset):
             os.path.join(DATA_PATH, "wine-quality/winequality-white.dat")
         )
         super().__init__()
-        self.theta0 = 10
-        self.theta1 = 100
+        self.theta0 = 1
+        self.theta1 = 10
 
 
 class SouthGermanCreditDataset(Dataset):
@@ -37,8 +37,8 @@ class SouthGermanCreditDataset(Dataset):
             os.path.join(DATA_PATH, "south-german-credit/SouthGermanCredit.dat")
         )
         super().__init__()
-        self.theta0 = 90
-        self.theta1 = 100
+        self.theta0 = 9
+        self.theta1 = 10
 
 
 class CropMappingDataset(Dataset):

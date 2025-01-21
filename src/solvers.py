@@ -1,21 +1,83 @@
 import numpy as np
+import random
 from gurobipy import Model as GurobiModel, GRB, Env
 from docplex.mp.model import Model as CplexModel
 import time
 import gc
-
 from constants import (
-    epsilon_N as eps_N,
-    epsilon_P as eps_P,
-    epsilon_R as eps_R,
+    epsilon_N,
+    epsilon_P,
+    epsilon_R,
     TIME_LIMIT,
     PRINT_OUTPUT,
     RAM_LIMIT,
 )
 
 
+def separating_hyperplane(P, N, eps_P, eps_N, eps_R, theta, lamb, num_trials=10000):
+    """
+    Finds the initial separating hyperplane using the provided algorithm.
+
+    Args:
+        P (numpy.ndarray): Set of positive samples (numpy arrays).
+        N (numpy.ndarray): Set of negative samples (numpy arrays).
+        eps_P (float): Parameter for positive samples.
+        eps_N (float): Parameter for negative samples.
+        eps_R (float): Regularization parameter.
+        theta (float): Scaling parameter.
+        lamb (float): Lambda parameter for the optimization.
+        num_trials (int): Number of random trials.
+
+    Returns:
+        tuple: Optimal hyperplane (w, c, reach), where w is the normal vector, c is the bias, and reach is the number of true positives.
+    """
+    dim = P.shape[1]  # Dimension of the feature space
+    L = -np.inf
+    best_h = None
+
+    for _ in range(num_trials):
+        # Choose a random unit vector w
+        w = np.random.randn(dim)
+        w /= np.linalg.norm(w)
+
+        # Choose a random point c in the unit hypercube
+        c = np.random.uniform(0, 1, dim)
+        c = -np.dot(w, c)
+
+        # Compute x_tilde and y_tilde arrays
+        distances_P = np.dot(P, w) - c
+        distances_N = np.dot(N, w) - c
+
+        x_tilde = np.where(distances_P >= eps_P, 1, 0)
+        y_tilde = np.where(distances_N > -eps_N, 1, 0)
+
+        # Compute V_tilde
+        V_tilde = max(
+            0, ((theta - 1) * np.sum(x_tilde) + theta * np.sum(y_tilde) + theta * eps_R)
+        )
+
+        # Compute L_tilde
+        L_tilde = np.sum(x_tilde) - V_tilde * lamb
+
+        # Update L and best_h
+        if L_tilde > L:
+            L = L_tilde
+            best_h = (w, c, np.sum(x_tilde))
+
+    return best_h
+
+
 def gurobi_solver(
-    *, theta, P, N, epsilon_P=eps_P, epsilon_N=eps_N, epsilon_R=eps_R, lambda_param=None
+    *,
+    theta,
+    theta0,
+    theta1,
+    P,
+    N,
+    epsilon_P=epsilon_P,
+    epsilon_N=epsilon_N,
+    epsilon_R=epsilon_R,
+    lambda_param=None,
 ):
     """
     Solves the wide-reach classification problem for given positive and negative samples.
@@ -32,12 +94,17 @@ def gurobi_solver(
 
     # Update indices for P and N after combining
     num_positive = P.shape[0]
+
     P_indices = range(num_positive)
     N_indices = range(num_positive, X.shape[0])
-
     # Parameters
     if not lambda_param:
-        lambda_param = (num_positive + 1) / theta
+        lambda_param = (num_positive + 1) * theta1
+
+    initial_w, initial_c, _ = separating_hyperplane(
+        P, N, epsilon_P, epsilon_N, epsilon_R, theta, lambda_param, num_trials=10000
+    )
+    # print(initial_w, initial_c)
 
     # Create the Gurobi model
     model = GurobiModel("Wide-Reach Classification")
@@ -56,6 +123,13 @@ def gurobi_solver(
     w = model.addVars(X.shape[1], lb=-GRB.INFINITY, name="w")
     c = model.addVar(lb=-GRB.INFINITY, name="c")
     V = model.addVar(lb=0, name="V")
+
+    if initial_w is not None:
+        for d in range(X.shape[1]):
+            w[d].Start = initial_w[d]
+
+    if initial_c is not None:
+        c.Start = initial_c
 
     # Objective: Maximize the reach minus penalty for precision violation
     model.setObjective(sum(x[i] for i in P_indices) - lambda_param * V, GRB.MAXIMIZE)
@@ -118,7 +192,16 @@ def gurobi_solver(
 
 
 def cplex_solver(
-    *, theta, P, N, epsilon_P=eps_P, epsilon_N=eps_N, epsilon_R=eps_R, lambda_param=None
+    *,
+    theta,
+    theta0,
+    theta1,
+    P,
+    N,
+    epsilon_P=epsilon_P,
+    epsilon_N=epsilon_N,
+    epsilon_R=epsilon_R,
+    lambda_param=None,
 ):
     """
     Solves the wide-reach classification problem using DOcplex for given positive and negative samples.
@@ -132,6 +215,10 @@ def cplex_solver(
         dict: Contains the reach, hyperplane parameters, bias, and precision violation, or an error message.
     """
     X = np.vstack((P, N))
+
+    initial_w, initial_c, _ = separating_hyperplane(
+        P, N, epsilon_P, epsilon_N, epsilon_R, theta, lambda_param, num_trials=10000
+    )
 
     # Update indices for P and N after combining
     num_positive = P.shape[0]
@@ -164,6 +251,12 @@ def cplex_solver(
     w = model.continuous_var_list(X.shape[1], lb=-model.infinity, name="w")
     c = model.continuous_var(lb=-model.infinity, name="c")
     V = model.continuous_var(lb=0, name="V")
+
+
+    c.start = initial_c
+
+    for i, var in enumerate(w):
+        var.start = initial_w[i]
 
     # Objective: Maximize the reach minus penalty for precision violation
     model.maximize(model.sum(x[i] for i in P_indices) - lambda_param * V)

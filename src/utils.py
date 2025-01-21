@@ -39,14 +39,14 @@ class Dataset:
 
     def params(self):
         self.theta = self.theta0 / self.theta1
-        self.lambda_param = (len(self.P) + 1) / self.theta
+        self.lambda_param = (len(self.P) + 1) * self.theta1
         return (self.theta0, self.theta1, self.theta, self.lambda_param)
 
 
 def plot_P_N(P, N):
     X = np.vstack((P, N))
     y = np.hstack((np.ones(len(P)), np.zeros(len(N))))
-    plt.figure(figsize=(4, 4))
+    plt.figure(figsize=(8, 8))
     plt.scatter(
         X[y == 0][:, 0],
         X[y == 0][:, 1],

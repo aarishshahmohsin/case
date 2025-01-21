@@ -1,7 +1,6 @@
 import numpy as np
-import math
 from scipy.special import factorial
-from scipy.stats import rayleigh, maxwell
+from scipy.stats import truncnorm
 from utils import Dataset
 from constants import D_MAX
 
@@ -128,254 +127,145 @@ class DiffusedBenchmark(Dataset):
 
 
 class PrismDataset(Dataset):
-    def __init__(self, n=400, d=11, f=8, p_mode="P"):
+    def __init__(
+        self, d=11, P_size=180, N_size=(32 * 180), f=8, background_noise=False
+    ):
         """
-        Parameters:
-        n (int): Total number of samples (default: 400).
-        d (int): Dimension of the dataset (default: 11).
-        f (float): Factor controlling negatives per positive (default: 8).
-        p_mode (str): Positive sample mode, "P" (default) or "P/4".
-        """
+        Generates a synthetic binary classification dataset using the Prism benchmark.
 
-        self.theta0 = 99
+        Parameters:
+        d (int): Total number of dimensions.
+        P_size (int): Total number of positive samples.
+        N_size (int): Total number of negative samples.
+        f (float): Desired ratio of negatives to positives inside the prism.
+        background_noise (bool): If True, half of the positive samples are background noise.
+        """
+        self.d = d
+        self.P_size = P_size
+        self.N_size = N_size
+        self.f = f
+        self.background_noise = background_noise
+        self.theta0 = 1
         self.theta1 = 100
 
-        self.n = n
-        self.d = d
-        self.f = f
-        self.p_mode = p_mode
-
-        # Total number of positive and negative samples
-        self.n_positive = n // 33
-        self.n_negative = n - self.n_positive
-
-        # Ratio of positives to negatives
-        self.p_to_n_ratio = self.n_positive / self.n_negative
-
-        # Volume (v) of the simplex
-        self.v = (
-            (self.n_positive if self.p_mode == "P" else self.n_positive / 4) * self.f
-        ) / self.n_negative
-
-        # Calculate d0 based on factorial constraints
-        self.d0 = self._compute_d0()
-        print(self.d0)
-
-        # Side length of the simplex
-        self.s = (self.v * factorial(self.d0)) ** (1 / self.d0)
-        self._generate()
-
-    def _compute_d0(self):
-        """Calculate d0 based on |N| / (p * f)."""
-        for d0 in range(1, self.d + 1):
-            if factorial(d0) <= self.n_negative / (
-                (self.n_positive if self.p_mode == "P" else self.n_positive / 4)
-                * self.f
-            ):
-                continue
-            return d0 - 1
-        return self.d
-
-    def generate_hypercube_points(self, n, d):
-        """Generate points uniformly in a hypercube."""
-        return np.random.uniform(0, 1, size=(n, d))
-
-    def generate_prism_points(self, n, d, d0, s):
-        k = np.random.exponential(scale=s, size=(n, d0))
-        P = k / sum(k)
-        padding = np.random.uniform(0, 1, size=(n, d - d0))  # Random padding
-        return np.hstack((P, padding))
+        # Generate the dataset
+        self.X, self.y = self._generate()
 
     def _generate(self):
-        """
-        Generate the Prism dataset.
+        """Generates the dataset."""
+        # Adjust positive sample count if background noise is enabled
+        if self.background_noise:
+            P_prism = self.P_size // 2
+        else:
+            P_prism = self.P_size
 
-        Returns:
-        X (numpy.ndarray): Feature matrix of shape (n, d).
-        y (numpy.ndarray): Labels array of shape (n,).
-        dict: Counts of each type of sample.
-        """
-        # Positive samples
-        n_positive_prism = (
-            self.n_positive if self.p_mode == "P" else self.n_positive // 4
-        )
-        n_positive_hypercube = self.n_positive - n_positive_prism
+        # Find the largest d0 such that d0! <= N_size / (P_prism * f)
+        d0 = 1
+        while factorial(d0) <= self.N_size / (P_prism * self.f):
+            d0 += 1
+        d0 -= 1  # Step back to last valid value
 
-        # Negative samples
-        # n_negative_prism = int(self.n_negative * self.v)
-        n_negative_hypercube = self.n_negative
+        # Compute the side length s of the d0-dimensional simplex
+        s = ((P_prism * self.f * factorial(d0)) / self.N_size) ** (1 / d0)
 
-        # Generate samples
-        positive_prism_points = self.generate_prism_points(
-            n_positive_prism, self.d, self.d0, self.s
-        )
-        positive_hypercube_points = self.generate_hypercube_points(
-            n_positive_hypercube, self.d
-        )
-        #
-        # negative_prism_points = self.generate_prism_points(
-        #     n_negative_prism, self.d, self.d0, self.s
-        # )
-        negative_hypercube_points = self.generate_hypercube_points(
-            n_negative_hypercube, self.d
-        )
+        # Generate negative samples uniformly in [0,1]^d
+        X_neg = np.random.uniform(0, 1, size=(self.N_size, self.d))
 
-        # Combine into dataset
-        self.X = np.vstack(
-            (
-                # negative_prism_points,
-                negative_hypercube_points,
-                positive_prism_points,
-                positive_hypercube_points,
-            )
-        )
-        self.y = np.hstack(
-            (
-                np.zeros(n_negative_hypercube),
-                np.ones(n_positive_prism + n_positive_hypercube),
-            )
-        )
+        # Generate positive samples inside the prism
+        X_pos = np.zeros((P_prism, self.d))
 
-        # Count of each type
-        # sample_counts = {
-        #     "positive_in_prism": n_positive_prism,
-        #     "positive_not_in_prism": n_positive_hypercube,
-        #     "negative_in_prism": n_negative_prism,
-        #     "negative_not_in_prism": n_negative_hypercube,
-        # }
+        for i in range(P_prism):
+            # Generate a point inside the d0-dimensional simplex
+            simplex_point = np.sort(np.random.uniform(0, s, d0))
+            simplex_point -= np.insert(
+                simplex_point[:-1], 0, 0
+            )  # Convert to barycentric
+            simplex_point = np.random.permutation(simplex_point)  # Shuffle dimensions
+
+            # Fill the first d0 dimensions with the simplex point
+            X_pos[i, :d0] = simplex_point
+
+            # Fill the remaining dimensions uniformly in [0,1]
+            X_pos[i, d0:] = np.random.uniform(0, 1, self.d - d0)
+
+        # Generate background noise if enabled
+        if self.background_noise:
+            X_bg = np.random.uniform(0, 1, size=(self.P_size - P_prism, self.d))
+            X_pos = np.vstack((X_pos, X_bg))
+
+        # Concatenate the negative and positive samples
+        X = np.vstack((X_neg, X_pos))
+        y = np.hstack((np.zeros(self.N_size), np.ones(self.P_size)))
+
+        # Shuffle the dataset
+        indices = np.arange(len(X))
+        np.random.shuffle(indices)
+
+        return X[indices], y[indices]
+
+    def __len__(self):
+        """Returns the total number of samples."""
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        """Returns a single sample and its label."""
+        return self.X[idx], self.y[idx]
 
 
-class L1PrismDataset(Dataset):
-    def __init__(self, n=400, d=11, f=8, p_mode="P", d0=2):
+class TruncatedNormalPrism(Dataset):
+    def __init__(self, P=180, N=None, d=11, d0=3, r=0.6, sigma=0.4016, f=8):
         """
         Parameters:
-        n (int): Total number of samples (default: 400).
-        d (int): Dimension of the dataset (default: 11).
-        f (float): Factor controlling negatives per positive (default: 8).
-        p_mode (str): Positive sample mode, "P" (default) or "P/4".
+        P (int): Number of positive samples (default: 180).
+        N (int): Number of negative samples (default: 32 * P).
+        d (int): Dimensionality of the dataset (default: 11).
+        d0 (int): Dimensions for the truncated normal (default: 3).
+        r (float): Radius for the truncated normal constraint (default: 0.6).
+        sigma (float): Standard deviation for the truncated normal (default: 0.4016).
+        f (float): Desired ratio of negatives to positives (default: 8).
         """
-
-        self.theta0 = 99
-        self.theta1 = 100
-
-        self.n = n
+        self.P = P
+        self.N = N if N is not None else 32 * P
         self.d = d
-        self.f = f
-        self.p_mode = p_mode
-
-        # Total number of positive and negative samples
-        self.n_positive = n // 5
-        self.n_negative = n - self.n_positive
-
         self.d0 = d0
+        self.r = r
+        self.sigma = sigma
+        self.f = f
+        self.theta0 = 1
+        self.theta1 = 10
 
-        self._generate()
-
-    def calculate_params(P, N, d=11, f=8, s=1):
-        """
-        Calculate parameters for the prism and multivariate normal models.
-
-        Parameters:
-            P (int): Number of positive samples.
-            N (int): Number of negative samples.
-            d (int): Dimension (default: 11).
-            f (float): Ratio of negatives to positives (default: 8).
-            s (float): Maximum length constraint for the positives (default: 1).
-
-        Returns:
-            dict: Dictionary containing calculated parameters.
-        """
-        results = {}
-
-        # Multivariate normal calculations (d0 = 2 and d0 = 3)
-        def rayleigh_cdf(r, sigma):
-            return rayleigh.cdf(r, scale=sigma)
-
-        def maxwell_cdf(r, sigma):
-            return maxwell.cdf(r, scale=sigma)
-
-        # Calculate r for d0 = 2
-        def calculate_r_d0_2(sigma, f, N, P):
-            pdf_val = rayleigh.pdf(1, sigma)
-            if pdf_val == 0:
-                return s  # Return max constraint if division is invalid
-            r = math.sqrt(
-                (4 * f * P * rayleigh.cdf(s, sigma)) / (math.pi * N * pdf_val)
-            )
-            return min(r, s)  # Ensure r <= s
-
-        # Calculate r for d0 = 3
-        def calculate_r_d0_3(sigma, f, N, P):
-            pdf_val = maxwell.pdf(1, sigma)
-            if pdf_val == 0:
-                return s  # Return max constraint if division is invalid
-            r = ((6 * f * P * maxwell.cdf(s, sigma)) / (math.pi * N * pdf_val)) ** (
-                1 / 3
-            )
-            return min(r, s)  # Ensure r <= s
-
-        sigma_2 = 1  # Initialize sigma for d0 = 2
-        sigma_3 = 1  # Initialize sigma for d0 = 3
-
-        r_2 = calculate_r_d0_2(sigma_2, f, N, P)
-        r_3 = calculate_r_d0_3(sigma_3, f, N, P)
-
-        results["multivariate_normal"] = {
-            "2": {
-                "sigma": sigma_2,
-                "r": r_2,
-                "density": (
-                    (rayleigh_cdf(r_2, sigma_2) / rayleigh_cdf(1, sigma_2))
-                    / (math.pi * r_2**2)
-                    if r_2 > 0
-                    else None
-                ),
-                "s": s,
-            },
-            "3": {
-                "sigma": sigma_3,
-                "r": r_3,
-                "density": (
-                    (maxwell_cdf(r_3, sigma_3) / maxwell_cdf(1, sigma_3))
-                    / ((4 / 3) * math.pi * r_3**3)
-                    if r_3 > 0
-                    else None
-                ),
-                "s": s,
-            },
-        }
-
-        return results
+        # Generate dataset
+        self.X, self.y = self._generate()
 
     def _generate(self):
-        params = self.calculate_params(self.n_positive, self.n_negative, f=8, s=1)
+        """Generates the dataset."""
+        # Generate negative samples
+        negative_samples = np.random.uniform(0, 1, size=(self.N, self.d))
 
-        sigma = params["multivariate_normal"][str(self.d0)]["sigma"]
-        r = params["multivariate_normal"][str(self.d0)]["r"]
+        # Generate positive samples
+        positive_samples = []
+        while len(positive_samples) < self.P:
+            # Sample from truncated normal for d0 dimensions
+            truncated_sample = truncnorm.rvs(
+                -self.r / self.sigma,
+                self.r / self.sigma,
+                scale=self.sigma,
+                size=self.d0,
+            )
+            # Uniformly sample the remaining d-d0 dimensions
+            remaining_dims = np.random.uniform(0, 1, size=self.d - self.d0)
+            # Concatenate to form the complete sample
+            sample = np.concatenate([truncated_sample, remaining_dims])
+            # Validate sample: Norm constraint and non-negativity
+            if np.linalg.norm(sample[: self.d0], ord=1) <= self.r and np.all(
+                sample >= 0
+            ):
+                positive_samples.append(sample)
 
-        def generate_positive_samples(P_size, d, d0, sigma, r):
-            samples = []
-            while len(samples) < P_size:
-                point = np.random.normal(loc=0, scale=sigma, size=d0)
-                length = np.linalg.norm(point, ord=1)
-                if length <= r and np.all(point >= 0):
-                    full_point = np.zeros(d)
-                    full_point[:d0] = point
-                    samples.append(full_point)
-            return np.array(samples)
+        positive_samples = np.array(positive_samples)
 
-        def generate_negative_samples(N_size, d, d0, s):
-            samples = []
-            while len(samples) < N_size:
-                point = np.random.uniform(low=0, high=s, size=d0)
-                if np.sum(point) <= s:
-                    full_point = np.zeros(d)
-                    full_point[:d0] = point
-                    samples.append(full_point)
-            return np.array(samples)
+        # Combine positive and negative samples
+        X = np.vstack((negative_samples, positive_samples))
+        y = np.hstack((np.zeros(self.N), np.ones(self.P)))
 
-        P = generate_positive_samples(self.n_positive, self.d, self.d0, sigma, r)
-        N = generate_negative_samples(self.n_negative, self.d, self.d0, 1)
-
-        self.X = np.vstack((P, N))
-        self.y = np.hstack((np.ones(self.n_positive), np.zeros(self.n_negative)))
+        return X, y
