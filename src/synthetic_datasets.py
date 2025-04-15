@@ -146,7 +146,7 @@ class PrismDataset(Dataset):
         self.f = f
         self.background_noise = background_noise
         self.theta0 = 1
-        self.theta1 = 100
+        self.theta1 = 10
 
         # Generate the dataset
         self.X, self.y = self._generate()
@@ -213,7 +213,7 @@ class PrismDataset(Dataset):
 
 
 class TruncatedNormalPrism(Dataset):
-    def __init__(self, P=180, N=None, d=11, d0=3, r=0.6, sigma=0.4016, f=8):
+    def __init__(self, P=180, N=None, d=11, d0=3, r=1.0, sigma=0.4016, f=8):
         """
         Parameters:
         P (int): Number of positive samples (default: 180).

@@ -47,3 +47,24 @@ class CropMappingDataset(Dataset):
         super().__init__()
         self.theta0 = 99
         self.theta1 = 100
+
+class s1(Dataset):
+    def __init__(self):
+        self.file_path = str(os.path.join(DATA_PATH, "datasets new/s1.dat"))
+        super().__init__()
+        self.theta0 = 1
+        self.theta1 = 10
+
+class s2(Dataset):
+    def __init__(self):
+        self.file_path = str(os.path.join(DATA_PATH, "datasets new/s2.dat"))
+        super().__init__()
+        self.theta0 = 1
+        self.theta1 = 10
+
+class s3(Dataset):
+    def __init__(self):
+        self.file_path = str(os.path.join(DATA_PATH, "datasets new/s3.dat"))
+        super().__init__()
+        self.theta0 = 1
+        self.theta1 = 10
