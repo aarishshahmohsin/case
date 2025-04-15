@@ -452,8 +452,6 @@ def scip_solver(
                 P, N, epsilon_P, epsilon_N, epsilon_R, theta, lambda_param, num_trials=10000
             )
 
-            initial_h = None
-
             if initial_h is not None:
                 start = model.newSolution()
                 init_w, init_c, reach = initial_h
