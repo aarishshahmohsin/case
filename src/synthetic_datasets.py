@@ -1,8 +1,13 @@
-import numpy as np
 from scipy.special import factorial
 from scipy.stats import truncnorm
 from utils import Dataset
 from constants import D_MAX
+import numpy as np
+from math import factorial
+from itertools import combinations
+from scipy.stats import chi
+from scipy.special import gamma
+from scipy.optimize import root_scalar
 
 
 class ClusterDataset(Dataset):
@@ -126,146 +131,358 @@ class DiffusedBenchmark(Dataset):
         self.y = np.hstack((np.zeros(n_negative), np.ones(n_positive)))
 
 
-class PrismDataset(Dataset):
-    def __init__(
-        self, d=11, P_size=180, N_size=(32 * 180), f=8, background_noise=False
-    ):
-        """
-        Generates a synthetic binary classification dataset using the Prism benchmark.
 
+class PrismDataset(Dataset):
+    def __init__(self, d=11, d0=2, s=1/np.sqrt(2), num_positive=180, num_negative=5760, 
+                 positive_background_ratio=0.5, num_prisms=1):
+        """
+        Initialize the prism dataset generator.
+        
         Parameters:
-        d (int): Total number of dimensions.
-        P_size (int): Total number of positive samples.
-        N_size (int): Total number of negative samples.
-        f (float): Desired ratio of negatives to positives inside the prism.
-        background_noise (bool): If True, half of the positive samples are background noise.
+        - d: Total dimensionality of the space
+        - d0: Dimensionality of the base simplex
+        - s: Side length of the simplex
+        - num_positive: Number of positive samples (|P|)
+        - num_negative: Number of negative samples (|N|)
+        - positive_background_ratio: Fraction of positive samples to distribute uniformly
+        - num_prisms: Number of prisms to generate (1 or 2)
         """
         self.d = d
-        self.P_size = P_size
-        self.N_size = N_size
-        self.f = f
-        self.background_noise = background_noise
+        self.d0 = d0
+        self.s = s
+        self.num_positive = num_positive
+        self.num_negative = num_negative
+        self.positive_background_ratio = positive_background_ratio
+        self.num_prisms = num_prisms
         self.theta0 = 1
         self.theta1 = 10
-
+        
+        # Validate parameters
+        if d0 > d:
+            raise ValueError("d0 cannot be greater than d")
+        if num_prisms not in [1, 2]:
+            raise ValueError("num_prisms must be 1 or 2")
+        
         # Generate the dataset
-        self.X, self.y = self._generate()
-
+        self._generate()
+        
+    def _generate_simplex_point(self):
+        """Generate a random point uniformly within a d0-dimensional simplex with side length s."""
+        # Generate uniform random numbers
+        u = np.random.uniform(0, 1, self.d0)
+        
+        # Sort the numbers and take differences to get uniform simplex samples
+        u_sorted = np.sort(u)
+        diffs = np.diff(np.concatenate(([0], u_sorted, [1])))
+        
+        # Scale by side length
+        return diffs[:-1] * self.s
+    
     def _generate(self):
-        """Generates the dataset."""
-        # Adjust positive sample count if background noise is enabled
-        if self.background_noise:
-            P_prism = self.P_size // 2
+        """Generate the dataset with positive and negative samples."""
+        # Generate negative samples (uniform in [0,1]^d)
+        self.X_negative = np.random.uniform(0, 1, (self.num_negative, self.d))
+        
+        # Calculate number of prism-positive samples
+        num_prism_positive = int(self.num_positive * (1 - self.positive_background_ratio))
+        num_background_positive = self.num_positive - num_prism_positive
+        
+        # Generate background positive samples (uniform in [0,1]^d)
+        if num_background_positive > 0:
+            X_background = np.random.uniform(0, 1, (num_background_positive, self.d))
         else:
-            P_prism = self.P_size
-
-        # Find the largest d0 such that d0! <= N_size / (P_prism * f)
+            X_background = np.empty((0, self.d))
+        
+        # Generate prism-positive samples
+        X_prism = []
+        
+        for _ in range(num_prism_positive):
+            # Generate point in simplex for first d0 dimensions
+            simplex_point = self._generate_simplex_point()
+            
+            # Generate uniform point for remaining dimensions
+            if self.d > self.d0:
+                remaining_dims = np.random.uniform(0, 1, self.d - self.d0)
+                point = np.concatenate((simplex_point, remaining_dims))
+            else:
+                point = simplex_point
+                
+            X_prism.append(point)
+            
+        X_prism = np.array(X_prism)
+        
+        # If two prisms, generate a second one at the opposite corner
+        if self.num_prisms == 2:
+            X_prism2 = []
+            for _ in range(num_prism_positive):
+                # Generate point in simplex for first d0 dimensions (opposite corner)
+                simplex_point = self.s - self._generate_simplex_point()
+                
+                # Generate uniform point for remaining dimensions
+                if self.d > self.d0:
+                    remaining_dims = np.random.uniform(0, 1, self.d - self.d0)
+                    point = np.concatenate((simplex_point, remaining_dims))
+                else:
+                    point = simplex_point
+                    
+                X_prism2.append(point)
+                
+            X_prism2 = np.array(X_prism2)
+            X_prism = np.vstack((X_prism, X_prism2))
+        
+        # Combine all positive samples
+        self.X_positive = np.vstack((X_prism, X_background)) if X_background.size > 0 else X_prism
+        
+        # Combine all samples and create labels
+        self.X = np.vstack((self.X_negative, self.X_positive))
+        self.y = np.concatenate((
+            np.zeros(self.num_negative),
+            np.ones(self.num_positive)
+        ))
+        
+    def generate(self):
+        """Return positive and negative samples separately."""
+        positive_mask = self.y == 1
+        negative_mask = self.y == 0
+        self.P = self.X[positive_mask]
+        self.N = self.X[negative_mask]
+        return self.P, self.N
+    
+    def get_dataset(self):
+        """Return the complete dataset (X, y)."""
+        return self.X, self.y
+    
+    @classmethod
+    def from_ratio(cls, d, num_positive, num_negative, f=8, positive_background_ratio=0.0, num_prisms=1):
+        """
+        Alternative constructor that calculates d0 and s based on desired ratio f = q/p.
+        
+        Parameters:
+        - d: Total dimensionality
+        - num_positive: Number of positive samples (|P|)
+        - num_negative: Number of negative samples (|N|)
+        - f: Desired ratio q/p of negatives to positives inside prism
+        - positive_background_ratio: Fraction of positive samples to distribute uniformly
+        - num_prisms: Number of prisms to generate (1 or 2)
+        """
+        # Calculate effective p based on background ratio
+        p = num_positive * (1 - positive_background_ratio)
+        if num_prisms == 2:
+            p = p / 2  # Each prism gets half the non-background positives
+        
+        # Find largest d0 such that d0! ≤ |N|/(p*f)
+        max_factorial = num_negative / (p * f)
         d0 = 1
-        while factorial(d0) <= self.N_size / (P_prism * self.f):
+        while factorial(d0 + 1) <= max_factorial:
             d0 += 1
-        d0 -= 1  # Step back to last valid value
+            
+        # Calculate side length s
+        s = (p * f * factorial(d0) / num_negative) ** (1/d0)
+        
+        return cls(d=d, d0=d0, s=s, num_positive=num_positive, 
+                   num_negative=num_negative, positive_background_ratio=positive_background_ratio,
+                   num_prisms=num_prisms)
 
-        # Compute the side length s of the d0-dimensional simplex
-        s = ((P_prism * self.f * factorial(d0)) / self.N_size) ** (1 / d0)
 
-        # Generate negative samples uniformly in [0,1]^d
-        X_neg = np.random.uniform(0, 1, size=(self.N_size, self.d))
 
-        # Generate positive samples inside the prism
-        X_pos = np.zeros((P_prism, self.d))
 
-        for i in range(P_prism):
-            # Generate a point inside the d0-dimensional simplex
-            simplex_point = np.sort(np.random.uniform(0, s, d0))
-            simplex_point -= np.insert(
-                simplex_point[:-1], 0, 0
-            )  # Convert to barycentric
-            simplex_point = np.random.permutation(simplex_point)  # Shuffle dimensions
-
-            # Fill the first d0 dimensions with the simplex point
-            X_pos[i, :d0] = simplex_point
-
-            # Fill the remaining dimensions uniformly in [0,1]
-            X_pos[i, d0:] = np.random.uniform(0, 1, self.d - d0)
-
-        # Generate background noise if enabled
-        if self.background_noise:
-            X_bg = np.random.uniform(0, 1, size=(self.P_size - P_prism, self.d))
-            X_pos = np.vstack((X_pos, X_bg))
-
-        # Concatenate the negative and positive samples
-        X = np.vstack((X_neg, X_pos))
-        y = np.hstack((np.zeros(self.N_size), np.ones(self.P_size)))
-
-        # Shuffle the dataset
-        indices = np.arange(len(X))
-        np.random.shuffle(indices)
-
-        return X[indices], y[indices]
-
-    def __len__(self):
-        """Returns the total number of samples."""
-        return len(self.X)
-
-    def __getitem__(self, idx):
-        """Returns a single sample and its label."""
-        return self.X[idx], self.y[idx]
 
 
 class TruncatedNormalPrism(Dataset):
-    def __init__(self, P=180, N=None, d=11, d0=3, r=1.0, sigma=0.4016, f=8):
+    def __init__(self, d=11, d0=2, r=0.6, sigma=0.4016, num_positive=180, 
+                 num_negative=5760, positive_background_ratio=0.0, num_clusters=1):
         """
+        Initialize the truncated normal dataset generator.
+        
         Parameters:
-        P (int): Number of positive samples (default: 180).
-        N (int): Number of negative samples (default: 32 * P).
-        d (int): Dimensionality of the dataset (default: 11).
-        d0 (int): Dimensions for the truncated normal (default: 3).
-        r (float): Radius for the truncated normal constraint (default: 0.6).
-        sigma (float): Standard deviation for the truncated normal (default: 0.4016).
-        f (float): Desired ratio of negatives to positives (default: 8).
+        - d: Total dimensionality of the space
+        - d0: Dimensionality of the normal distribution
+        - r: Radius of the L2 ball for truncation
+        - sigma: Standard deviation of the normal distribution
+        - num_positive: Number of positive samples (|P|)
+        - num_negative: Number of negative samples (|N|)
+        - positive_background_ratio: Fraction of positive samples to distribute uniformly
+        - num_clusters: Number of clusters to generate (1 or 2)
         """
-        self.P = P
-        self.N = N if N is not None else 32 * P
         self.d = d
         self.d0 = d0
         self.r = r
         self.sigma = sigma
-        self.f = f
+        self.num_positive = num_positive
+        self.num_negative = num_negative
+        self.positive_background_ratio = positive_background_ratio
+        self.num_clusters = num_clusters
         self.theta0 = 1
         self.theta1 = 10
-
-        # Generate dataset
-        self.X, self.y = self._generate()
-
+        
+        # Validate parameters
+        if d0 > d:
+            raise ValueError("d0 cannot be greater than d")
+        if num_clusters not in [1, 2]:
+            raise ValueError("num_clusters must be 1 or 2")
+        if r > 1:
+            raise ValueError("r must be ≤ 1 for unit hypercube")
+            
+        # Generate the dataset
+        self._generate()
+        
+    def _chi_cdf(self, x):
+        """CDF of the chi distribution with d0 degrees of freedom scaled by sigma."""
+        return chi.cdf(x/self.sigma, self.d0)
+    
+    def _generate_truncated_normal_point(self):
+        """Generate a random point from truncated normal distribution."""
+        while True:
+            # Sample from multivariate normal
+            point = np.random.normal(0, self.sigma, self.d0)
+            norm = np.linalg.norm(point)
+            
+            # Reject if outside unit ball or if norm > r
+            if norm <= self.r and all(0 <= x <= 1 for x in point):
+                return point
+    
     def _generate(self):
-        """Generates the dataset."""
-        # Generate negative samples
-        negative_samples = np.random.uniform(0, 1, size=(self.N, self.d))
+        """Generate the dataset with positive and negative samples."""
+        # Generate negative samples (uniform in [0,1]^d)
+        self.X_negative = np.random.uniform(0, 1, (self.num_negative, self.d))
+        
+        # Calculate number of cluster-positive samples
+        num_cluster_positive = int(self.num_positive * (1 - self.positive_background_ratio))
+        num_background_positive = self.num_positive - num_cluster_positive
+        
+        # Generate background positive samples (uniform in [0,1]^d)
+        if num_background_positive > 0:
+            X_background = np.random.uniform(0, 1, (num_background_positive, self.d))
+        else:
+            X_background = np.empty((0, self.d))
+        
+        # Generate cluster-positive samples
+        X_cluster = []
+        
+        for _ in range(num_cluster_positive):
+            # Generate point from truncated normal for first d0 dimensions
+            normal_part = self._generate_truncated_normal_point()
+            
+            # Generate uniform point for remaining dimensions
+            if self.d > self.d0:
+                remaining_dims = np.random.uniform(0, 1, self.d - self.d0)
+                point = np.concatenate((normal_part, remaining_dims))
+            else:
+                point = normal_part
+                
+            X_cluster.append(point)
+            
+        X_cluster = np.array(X_cluster)
+        
+        # If two clusters, generate a second one at the opposite corner
+        if self.num_clusters == 2:
+            X_cluster2 = []
+            for _ in range(num_cluster_positive):
+                # Generate point from truncated normal for first d0 dimensions (opposite corner)
+                normal_part = 1 - self._generate_truncated_normal_point()
+                
+                # Generate uniform point for remaining dimensions
+                if self.d > self.d0:
+                    remaining_dims = np.random.uniform(0, 1, self.d - self.d0)
+                    point = np.concatenate((normal_part, remaining_dims))
+                else:
+                    point = normal_part
+                    
+                X_cluster2.append(point)
+                
+            X_cluster2 = np.array(X_cluster2)
+            X_cluster = np.vstack((X_cluster, X_cluster2))
+        
+        # Combine all positive samples
+        self.X_positive = np.vstack((X_cluster, X_background)) if X_background.size > 0 else X_cluster
+        
+        # Combine all samples and create labels
+        self.X = np.vstack((self.X_negative, self.X_positive))
+        self.y = np.concatenate((
+            np.zeros(self.num_negative),
+            np.ones(self.num_positive)
+        ))
+        
+    def generate(self):
+        """Return positive and negative samples separately."""
+        positive_mask = self.y == 1
+        negative_mask = self.y == 0
+        self.P = self.X[positive_mask]
+        self.N = self.X[negative_mask]
+        return self.P, self.N
+    
+    def get_dataset(self):
+        """Return the complete dataset (X, y)."""
+        return self.X, self.y
+    
+    @classmethod
+    def from_ratio(cls, d, d0, num_positive, num_negative, f=8, 
+                   positive_background_ratio=0.0, num_clusters=1):
+        """
+        Alternative constructor that calculates r and sigma based on desired ratio f = q/p.
+        
+        Parameters:
+        - d: Total dimensionality
+        - d0: Dimensionality of the normal distribution
+        - num_positive: Number of positive samples (|P|)
+        - num_negative: Number of negative samples (|N|)
+        - f: Desired ratio q/p of negatives to positives inside cluster
+        - positive_background_ratio: Fraction of positive samples to distribute uniformly
+        - num_clusters: Number of clusters to generate (1 or 2)
+        """
+        # Calculate effective p based on background ratio and number of clusters
+        p = num_positive * (1 - positive_background_ratio)
+        if num_clusters == 2:
+            p = p / 2  # Each cluster gets half the non-background positives
+        
+        # Volume of d0-dimensional L2 ball
+        def ball_volume(r):
+            return (np.pi ** (d0/2) * (r ** d0)) / gamma(d0/2 + 1)
+        
+        # Equation to solve: f = (vol(r)*|N|*F(1))/(2^d*|P|*F(r))
+        def equation(sigma):
+            # We'll solve for r given sigma
+            def inner_eq(r):
+                if r > 1:
+                    return np.inf
+                vol = ball_volume(r)
+                F_r = chi.cdf(r/sigma, d0)
+                F_1 = chi.cdf(1/sigma, d0)
+                return vol * num_negative * F_1 / (2**d * p * F_r) - f
+            
+            # Find r that satisfies the equation for this sigma
+            try:
+                sol = root_scalar(inner_eq, bracket=[0.01, 1], method='brentq')
+                return sol.root, sol.converged
+            except:
+                return np.nan, False
+        
+        # Find sigma that gives r ≤ 1
+        # We'll do a simple search over possible sigma values
+        best_sigma = None
+        best_r = None
+        min_diff = np.inf
+        
+        # Search over possible sigma values
+        for sigma in np.linspace(0.1, 1.0, 100):
+            r, converged = equation(sigma)
+            if converged and r <= 1:
+                # Calculate how close we are to desired f
+                vol = ball_volume(r)
+                F_r = chi.cdf(r/sigma, d0)
+                F_1 = chi.cdf(1/sigma, d0)
+                current_f = vol * num_negative * F_1 / (2**d * p * F_r)
+                diff = abs(current_f - f)
+                
+                if diff < min_diff:
+                    min_diff = diff
+                    best_sigma = sigma
+                    best_r = r
+        
+        if best_sigma is None:
+            raise ValueError("Could not find parameters satisfying the desired ratio")
+            
+        return cls(d=d, d0=d0, r=best_r, sigma=best_sigma, num_positive=num_positive,
+                   num_negative=num_negative, positive_background_ratio=positive_background_ratio,
+                   num_clusters=num_clusters)
 
-        # Generate positive samples
-        positive_samples = []
-        while len(positive_samples) < self.P:
-            # Sample from truncated normal for d0 dimensions
-            truncated_sample = truncnorm.rvs(
-                -self.r / self.sigma,
-                self.r / self.sigma,
-                scale=self.sigma,
-                size=self.d0,
-            )
-            # Uniformly sample the remaining d-d0 dimensions
-            remaining_dims = np.random.uniform(0, 1, size=self.d - self.d0)
-            # Concatenate to form the complete sample
-            sample = np.concatenate([truncated_sample, remaining_dims])
-            # Validate sample: Norm constraint and non-negativity
-            if np.linalg.norm(sample[: self.d0], ord=1) <= self.r and np.all(
-                sample >= 0
-            ):
-                positive_samples.append(sample)
-
-        positive_samples = np.array(positive_samples)
-
-        # Combine positive and negative samples
-        X = np.vstack((negative_samples, positive_samples))
-        y = np.hstack((np.zeros(self.N), np.ones(self.P)))
-
-        return X, y

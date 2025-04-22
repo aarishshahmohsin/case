@@ -52,7 +52,7 @@ def plot_P_N(P, N):
         X[y == 0][:, 1],
         color="blue",
         label="Negative Samples",
-        alpha=0.5,
+        alpha=0.1,
         marker="x",
     )
     plt.scatter(
@@ -66,5 +66,49 @@ def plot_P_N(P, N):
     plt.xlabel("Feature 1")
     plt.ylabel("Feature 2")
     plt.legend()
+    plt.grid()
+    plt.show()
+
+import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+def plot_P_N_3d(P, N):
+    """
+    3D scatter plot for positive and negative samples.
+
+    Args:
+        P: np.ndarray of shape (n_pos, 3) - Positive samples
+        N: np.ndarray of shape (n_neg, 3) - Negative samples
+    """
+    X = np.vstack((P, N))
+    y = np.hstack((np.ones(len(P)), np.zeros(len(N))))
+
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    ax.scatter(
+        X[y == 0][:, 0],
+        X[y == 0][:, 1],
+        X[y == 0][:, 2],
+        color="blue",
+        label="Negative Samples",
+        alpha=0.1,
+        marker="x"
+    )
+    ax.scatter(
+        X[y == 1][:, 0],
+        X[y == 1][:, 1],
+        X[y == 1][:, 2],
+        color="red",
+        label="Positive Samples",
+        alpha=0.5,
+        marker="x"
+    )
+
+    ax.set_xlabel("Feature 1")
+    ax.set_ylabel("Feature 2")
+    ax.set_zlabel("Feature 3")
+    ax.legend()
     plt.grid()
     plt.show()

@@ -19,6 +19,7 @@ from synthetic_datasets import (
 )
 from solvers import cplex_solver, gurobi_solver, scip_solver
 import pandas as pd
+from utils import plot_P_N, plot_P_N_3d
 
 datasets = {
     "Breast Cancer": BreastCancerDataset(),
@@ -31,15 +32,16 @@ datasets = {
     "Cluster": ClusterDataset(d=11),
     "Two Cluster": TwoClusterDataset(d=11),
     "Diffused Benchmark": DiffusedBenchmark(),
-    "Prism": PrismDataset(),
+    "Prism": PrismDataset(d=11),
+    '360 prism': PrismDataset(num_positive=360, s=0.909, d0=3, d=11),
     "Truncated Normal Prism": TruncatedNormalPrism(),
     's1': s1(),
     's2': s2(),
-    's4': s3(),
+    's3': s3(),
 }
 
 
-times = 5
+times = 1
 results = {}
 
 final_res = []
@@ -47,8 +49,29 @@ final_res = []
 
 for dataset_name, dataset in datasets.items():
     P, N = dataset.generate()
+    # plot_P_N_3d(P, N)
+    # print(P.shape, N.shape)
+    # print(P, N)
+    # plot_P_N(P, N)
+    # sums = []
+    # for i in range(len(P)):
+    #     sum = 0
+    #     for j in range(3):
+    #         sum += P[i][j]
+    #     sums.append(float(sum))
+
+    # sums.sort()
+    # with open('sorted_prism.txt', 'w') as f:
+    #     for i in sums:
+    #         f.write(f'{i}\n')
+    # print(sums)
+    # with open('prism.txt', 'w') as f:
+    #     for i in P:
+    #         f.write(f'{i}\n')
+    #     for i in N:
+    #         f.write(f'{i}\n')
     theta_0, theta_1, theta, lambda_param = dataset.params()
-    #   final_res = []
+    # # # final_res = []
     for i in range(times):
         res_gurobi = scip_solver(
             theta=theta,
@@ -68,4 +91,4 @@ for dataset_name, dataset in datasets.items():
         print(e - t)
         
 
-print(final_res)
+# print(final_res)

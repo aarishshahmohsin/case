@@ -2,6 +2,7 @@ import numpy as np
 import random
 from gurobipy import Model as GurobiModel, GRB, Env
 from docplex.mp.model import Model as CplexModel
+from pyscipopt import Model, quicksum
 import time
 import gc
 from constants import (
@@ -370,12 +371,6 @@ def cplex_solver(
         return None
 
 
-
-import numpy as np
-import time
-import gc
-from pyscipopt import Model, quicksum
-
 def scip_solver(
     *,
     theta,
@@ -453,21 +448,22 @@ def scip_solver(
             )
 
             if initial_h is not None:
-                start = model.newSolution()
                 init_w, init_c, reach = initial_h
-                print(f"Initial reach = {reach}")
                 distances_P = np.dot(P, init_w) - init_c
                 distances_N = np.dot(N, init_w) - init_c
 
                 xs = distances_P >= epsilon_P
                 ys = distances_N > -epsilon_N
-
                 assert xs.sum() == reach
+                
+                # Create a partial solution
+                model.freeTransform()
                 for i in range(num_positive):
-                    start.setVal(x[i], int(xs[i]))
-                for i in range(len(N_indices)):
-                    start.setVal(y[i], int(ys[i]))
-                model.addSol(start)
+                    model.chgVarUb(x[i], xs[i])
+                    model.chgVarLb(x[i], xs[i])
+                for j in range(len(N_indices)):
+                    model.chgVarUb(y[j], ys[j])
+                    model.chgVarLb(y[j], ys[j])
         except Exception as e:
             print("Failed to set initial solution:", str(e))
 
@@ -498,5 +494,3 @@ def scip_solver(
         return results
     else:
         return None
-
-
