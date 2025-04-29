@@ -133,7 +133,7 @@ class DiffusedBenchmark(Dataset):
 
 
 class PrismDataset(Dataset):
-    def __init__(self, d=11, d0=2, s=1/np.sqrt(2), num_positive=180, num_negative=5760, 
+    def __init__(self, d=11, d0=3, s=0.909, num_positive=180, num_negative=5760, 
                  positive_background_ratio=0.5, num_prisms=1):
         """
         Initialize the prism dataset generator.
@@ -157,135 +157,44 @@ class PrismDataset(Dataset):
         self.theta0 = 1
         self.theta1 = 10
         
-        # Validate parameters
-        if d0 > d:
-            raise ValueError("d0 cannot be greater than d")
-        if num_prisms not in [1, 2]:
-            raise ValueError("num_prisms must be 1 or 2")
-        
-        # Generate the dataset
         self._generate()
+
+    def sample_simplex(self, n, d0, side_length):
+        # Sample from a d0-simplex using the method of Dirichlet distribution
+        dirichlet_samples = np.random.dirichlet([1]* (d0 + 1), n)
+        # Drop the last coordinate (since it's determined by the others)
+        simplex_coords = dirichlet_samples[:, :-1] * side_length
+        return simplex_coords
+ 
         
-    def _generate_simplex_point(self):
-        """Generate a random point uniformly within a d0-dimensional simplex with side length s."""
-        # Generate uniform random numbers
-        u = np.random.uniform(0, 1, self.d0)
-        
-        # Sort the numbers and take differences to get uniform simplex samples
-        u_sorted = np.sort(u)
-        diffs = np.diff(np.concatenate(([0], u_sorted, [1])))
-        
-        # Scale by side length
-        return diffs[:-1] * self.s
-    
     def _generate(self):
-        """Generate the dataset with positive and negative samples."""
-        # Generate negative samples (uniform in [0,1]^d)
-        self.X_negative = np.random.uniform(0, 1, (self.num_negative, self.d))
-        
-        # Calculate number of prism-positive samples
-        num_prism_positive = int(self.num_positive * (1 - self.positive_background_ratio))
-        num_background_positive = self.num_positive - num_prism_positive
-        
-        # Generate background positive samples (uniform in [0,1]^d)
-        if num_background_positive > 0:
-            X_background = np.random.uniform(0, 1, (num_background_positive, self.d))
-        else:
-            X_background = np.empty((0, self.d))
-        
-        # Generate prism-positive samples
-        X_prism = []
-        
-        for _ in range(num_prism_positive):
-            # Generate point in simplex for first d0 dimensions
-            simplex_point = self._generate_simplex_point()
-            
-            # Generate uniform point for remaining dimensions
-            if self.d > self.d0:
-                remaining_dims = np.random.uniform(0, 1, self.d - self.d0)
-                point = np.concatenate((simplex_point, remaining_dims))
-            else:
-                point = simplex_point
-                
-            X_prism.append(point)
-            
-        X_prism = np.array(X_prism)
-        
-        # If two prisms, generate a second one at the opposite corner
-        if self.num_prisms == 2:
-            X_prism2 = []
-            for _ in range(num_prism_positive):
-                # Generate point in simplex for first d0 dimensions (opposite corner)
-                simplex_point = self.s - self._generate_simplex_point()
-                
-                # Generate uniform point for remaining dimensions
-                if self.d > self.d0:
-                    remaining_dims = np.random.uniform(0, 1, self.d - self.d0)
-                    point = np.concatenate((simplex_point, remaining_dims))
-                else:
-                    point = simplex_point
-                    
-                X_prism2.append(point)
-                
-            X_prism2 = np.array(X_prism2)
-            X_prism = np.vstack((X_prism, X_prism2))
-        
-        # Combine all positive samples
-        self.X_positive = np.vstack((X_prism, X_background)) if X_background.size > 0 else X_prism
-        
-        # Combine all samples and create labels
-        self.X = np.vstack((self.X_negative, self.X_positive))
-        self.y = np.concatenate((
-            np.zeros(self.num_negative),
-            np.ones(self.num_positive)
-        ))
-        
+        assert self.d > self.d0, "Total dimension d must be greater than d0"
+
+        p_in = int(self.num_positive * (1 - self.positive_background_ratio))
+        p_noise = self.num_positive - p_in
+
+        # Generate prism positives
+        simplex_part = self.sample_simplex(p_in, self.d0, self.s)
+        uniform_part = np.random.uniform(0, 1, size=(p_in, self.d - self.d0))
+        positives_prism = np.hstack((simplex_part, uniform_part))
+
+        # Generate noisy positives (uniformly)
+        positives_noise = np.random.uniform(0, 1, size=(p_noise, self.d))
+
+        # Combine positives
+        self.P = np.vstack((positives_prism, positives_noise))
+        positives_labels = np.ones((self.num_positive, 1))
+
+        # Generate negatives (uniformly)
+        self.N = np.random.uniform(0, 1, size=(self.num_negative, self.d))
+        negatives_labels = np.zeros((self.num_negative, 1))
+
+
+              
     def generate(self):
-        """Return positive and negative samples separately."""
-        positive_mask = self.y == 1
-        negative_mask = self.y == 0
-        self.P = self.X[positive_mask]
-        self.N = self.X[negative_mask]
         return self.P, self.N
     
-    def get_dataset(self):
-        """Return the complete dataset (X, y)."""
-        return self.X, self.y
     
-    @classmethod
-    def from_ratio(cls, d, num_positive, num_negative, f=8, positive_background_ratio=0.0, num_prisms=1):
-        """
-        Alternative constructor that calculates d0 and s based on desired ratio f = q/p.
-        
-        Parameters:
-        - d: Total dimensionality
-        - num_positive: Number of positive samples (|P|)
-        - num_negative: Number of negative samples (|N|)
-        - f: Desired ratio q/p of negatives to positives inside prism
-        - positive_background_ratio: Fraction of positive samples to distribute uniformly
-        - num_prisms: Number of prisms to generate (1 or 2)
-        """
-        # Calculate effective p based on background ratio
-        p = num_positive * (1 - positive_background_ratio)
-        if num_prisms == 2:
-            p = p / 2  # Each prism gets half the non-background positives
-        
-        # Find largest d0 such that d0! ≤ |N|/(p*f)
-        max_factorial = num_negative / (p * f)
-        d0 = 1
-        while factorial(d0 + 1) <= max_factorial:
-            d0 += 1
-            
-        # Calculate side length s
-        s = (p * f * factorial(d0) / num_negative) ** (1/d0)
-        
-        return cls(d=d, d0=d0, s=s, num_positive=num_positive, 
-                   num_negative=num_negative, positive_background_ratio=positive_background_ratio,
-                   num_prisms=num_prisms)
-
-
-
-
 
 
 class TruncatedNormalPrism(Dataset):

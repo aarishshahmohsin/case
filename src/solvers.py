@@ -371,6 +371,7 @@ def cplex_solver(
         return None
 
 
+
 def scip_solver(
     *,
     theta,
@@ -378,119 +379,169 @@ def scip_solver(
     theta1,
     P,
     N,
-    epsilon_P=1e-4,
-    epsilon_N=1e-4,
-    epsilon_R=1e-4,
+    epsilon_P=epsilon_P,
+    epsilon_N=epsilon_N,
+    epsilon_R=epsilon_R,
     lambda_param=None,
     dataset_name='random_name',
     run=True,
-    TIME_LIMIT=120,
-    PRINT_OUTPUT=True,
 ):
     """
-    Solves the wide-reach classification problem using SCIP.
+    Solves the wide-reach classification problem using SCIP for given positive and negative samples.
+
+    Parameters:
+        theta (float): Precision threshold.
+        theta0 (float): Parameter for optimization.
+        theta1 (float): Parameter for optimization.
+        P (numpy.ndarray): Feature matrix of positive samples (n_positive, n_features).
+        N (numpy.ndarray): Feature matrix of negative samples (n_negative, n_features).
+        epsilon_P (float, optional): Parameter for positive samples.
+        epsilon_N (float, optional): Parameter for negative samples.
+        epsilon_R (float, optional): Regularization parameter.
+        lambda_param (float, optional): Lambda parameter for the optimization.
+        dataset_name (str, optional): Name for output files.
+        run (bool, optional): Whether to solve the model or just create it.
+
+    Returns:
+        dict: Contains the reach, hyperplane parameters, bias, and precision violation, or an error message.
     """
     X = np.vstack((P, N))
+
+    # Update indices for P and N after combining
     num_positive = P.shape[0]
+
     P_indices = range(num_positive)
     N_indices = range(num_positive, X.shape[0])
-
+    
+    # Parameters
     if not lambda_param:
         lambda_param = (num_positive + 1) * theta1
 
+    initial_h = separating_hyperplane(
+        P, N, epsilon_P, epsilon_N, epsilon_R, theta, lambda_param, num_trials=10000
+    )
+
+    # Create the SCIP model
     model = Model("Wide-Reach Classification")
+
     if not PRINT_OUTPUT:
         model.hideOutput()
-    model.setParam("limits/time", TIME_LIMIT)
+    
+    if TIME_LIMIT:
+        model.setRealParam('limits/time', TIME_LIMIT)
+    
+    # Adjusting hyperparameters
+    # model.setIntParam('randomization/randomseedshift', 42)
+    # model.setRealParam('limits/gap', 0.0001)
+    # model.setRealParam('limits/absgap', 0.0001)
+    model.setIntParam('separating/maxrounds', -1)  # Unlimited cutting plane rounds
+    
+    # Decision variables
+    x = {}
+    for i in P_indices:
+        x[i] = model.addVar(vtype="B", name=f"x_{i}")
+    
+    y = {}
+    for j in range(len(N_indices)):
+        y[j] = model.addVar(vtype="B", name=f"y_{j}")
+    
+    w = {}
+    for d in range(X.shape[1]):
+        w[d] = model.addVar(lb=None, ub=None, name=f"w_{d}")
+    
+    c = model.addVar(lb=None, ub=None, name="c")
+    V = model.addVar(lb=0, name="V")
 
-    # Variables
-    x = {i: model.addVar(vtype="B", name=f"x[{i}]") for i in P_indices}
-    y = {j: model.addVar(vtype="B", name=f"y[{j}]") for j in range(len(N_indices))}
-    w = {d: model.addVar(vtype="C", lb=-model.infinity(), name=f"w[{d}]") for d in range(X.shape[1])}
-    c = model.addVar(vtype="C", lb=-model.infinity(), name="c")
-    V = model.addVar(vtype="C", lb=0, name="V")
+    # Set initial solution if available
+    if initial_h is not None:
+        init_w, init_c, reach = initial_h
+        distances_P = np.dot(P, init_w) - init_c
+        distances_N = np.dot(N, init_w) - init_c
 
-    # Objective: Maximize reach - penalty
-    model.setObjective(
-        quicksum(x[i] for i in P_indices) - lambda_param * V,
-        "maximize"
-    )
+        xs = distances_P >= epsilon_P
+        ys = distances_N > -epsilon_N
+    
+        
+    # Constraint: Precision constraint violation
+    precision_expr = (theta - 1) * quicksum(x[i] for i in P_indices) + \
+                    theta * quicksum(y[j] for j in range(len(N_indices))) + \
+                    theta * epsilon_R
+    
+    model.addCons(V >= precision_expr, name="PrecisionConstraint")
 
-    # Precision constraint
-    model.addCons(
-        V >= (theta - 1) * quicksum(x[i] for i in P_indices)
-             + theta * quicksum(y[j] for j in range(len(N_indices)))
-             + theta * epsilon_R,
-        name="PrecisionConstraint"
-    )
-
-    # Constraints: Positive samples
+    # Constraints: Classification constraints for positive samples
     for i, p_idx in enumerate(P_indices):
-        model.addCons(
-            x[i] <= 1 + quicksum(w[d] * X[p_idx, d] for d in range(X.shape[1])) - c - epsilon_P,
-            name=f"Positive_{i}"
-        )
+        pos_expr = 1 + quicksum(w[d] * X[p_idx, d] for d in range(X.shape[1])) - c - epsilon_P
+        model.addCons(x[i] <= pos_expr, name=f"Positive_{i}")
 
-    # Constraints: Negative samples
     for j, n_idx in enumerate(N_indices):
-        model.addCons(
-            y[j] >= quicksum(w[d] * X[n_idx, d] for d in range(X.shape[1])) - c + epsilon_N,
-            name=f"Negative_{j}"
-        )
+        neg_expr = quicksum(w[d] * X[n_idx, d] for d in range(X.shape[1])) - c + epsilon_N
+        model.addCons(y[j] >= neg_expr, name=f"Negative_{j}")
 
-    model.writeProblem(f"{dataset_name}.cip")
+    objective = quicksum(x[i] for i in P_indices) - lambda_param * V
+    model.setObjective(objective, "maximize")
 
-    # Initial solution via heuristic
+    model.writeProblem(f"{dataset_name}.lp")
+
     if run:
-        try:
-            initial_h = separating_hyperplane(
-                P, N, epsilon_P, epsilon_N, epsilon_R, theta, lambda_param, num_trials=10000
-            )
+        if initial_h is not None:
+            init_w, init_c, reach = initial_h
+            distances_P = np.dot(P, init_w) - init_c
+            distances_N = np.dot(N, init_w) - init_c
 
-            if initial_h is not None:
-                init_w, init_c, reach = initial_h
-                distances_P = np.dot(P, init_w) - init_c
-                distances_N = np.dot(N, init_w) - init_c
+            xs = distances_P >= epsilon_P
+            ys = distances_N > -epsilon_N
+            
+            print(f"Applying initial solution with reach={reach}")
+            
+            sol = model.createPartialSol()
+            
+            for i in P_indices:
+                model.setSolVal(sol, x[i], 1.0 if xs[i] else 0.0)
+            
+            for j in range(len(N_indices)):
+                model.setSolVal(sol, y[j], 1.0 if ys[j] else 0.0)
+            
+            for d in range(X.shape[1]):
+                model.setSolVal(sol, w[d], init_w[d])
+            
+            model.setSolVal(sol, c, init_c)
+            v_val = max(0, ((theta - 1) * xs.sum() + theta * ys.sum() + theta * epsilon_R))
+            model.setSolVal(sol, V, v_val)
+            
+            # Try adding the solution as a heuristic (optional)
+            try:
+                model.addSol(sol)
+            except:
+                print("Warning: Could not add initial solution as heuristic")
+            
+            # Free the partial solution (optional)
+            del sol
 
-                xs = distances_P >= epsilon_P
-                ys = distances_N > -epsilon_N
-                assert xs.sum() == reach
-                
-                # Create a partial solution
-                model.freeTransform()
-                for i in range(num_positive):
-                    model.chgVarUb(x[i], xs[i])
-                    model.chgVarLb(x[i], xs[i])
-                for j in range(len(N_indices)):
-                    model.chgVarUb(y[j], ys[j])
-                    model.chgVarLb(y[j], ys[j])
-        except Exception as e:
-            print("Failed to set initial solution:", str(e))
-
+            
         start_time = time.time()
         model.optimize()
         end_time = time.time()
 
-        status = model.getStatus()
-        if status in ['optimal', 'timelimit', 'nodelimit']:
+        if model.getStatus() == "optimal" or model.getStatus() == "timelimit":
             results = {
-                "Reach": sum(round(model.getVal(x[i])) for i in P_indices),
+                "Reach": sum(model.getVal(x[i]) for i in P_indices),
                 "Hyperplane w": [model.getVal(w[d]) for d in range(X.shape[1])],
                 "Bias c": model.getVal(c),
-                "X": [round(model.getVal(x[d])) for d in range(len(P))],
-                "Y": [round(model.getVal(y[d])) for d in range(len(N))],
+                "X": [model.getVal(x[d]) for d in range(len(P))],
+                "Y": [model.getVal(y[d]) for d in range(len(N))],
                 "Precision Violation V": model.getVal(V),
                 "Node Count": model.getNNodes(),
                 "Time taken": end_time - start_time,
-                "Status": status,
             }
         else:
-            results = {"Error": f"No optimal solution found. Status: {status}"}
+            results = {"Error": f"No optimal solution found. Status: {model.getStatus()}"}
 
         model.freeProb()
         del model
         gc.collect()
 
         return results
+
     else:
         return None
