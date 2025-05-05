@@ -15,7 +15,7 @@ from constants import (
 )
 
 
-def separating_hyperplane(P, N, eps_P, eps_N, eps_R, theta, lamb, num_trials=10000):
+def separating_hyperplane(P, N, eps_P, eps_N, eps_R, theta, lamb, num_trials=10000, seeds=None):
     """
     Finds the initial separating hyperplane using the provided algorithm.
 
@@ -32,6 +32,7 @@ def separating_hyperplane(P, N, eps_P, eps_N, eps_R, theta, lamb, num_trials=100
     Returns:
         tuple: Optimal hyperplane (w, c, reach), where w is the normal vector, c is the bias, and reach is the number of true positives.
     """
+    if seeds: np.random.seed(seed=seeds)
     dim = P.shape[1]  # Dimension of the feature space
     L = -np.inf
     best_h = None
@@ -81,6 +82,7 @@ def gurobi_solver(
     lambda_param=None,
     dataset_name='random_name',
     run=True,
+    seeds=None,
 ):
     """
     Solves the wide-reach classification problem for given positive and negative samples.
@@ -105,7 +107,7 @@ def gurobi_solver(
         lambda_param = (num_positive + 1) * theta1
 
     initial_h = separating_hyperplane(
-        P, N, epsilon_P, epsilon_N, epsilon_R, theta, lambda_param, num_trials=10000
+        P, N, epsilon_P, epsilon_N, epsilon_R, theta, lambda_param, num_trials=10000, seeds=seeds
     )
     # initial_h = None
     # print(initial_w, initial_c)
@@ -142,6 +144,7 @@ def gurobi_solver(
         init_w, init_c, reach = initial_h
         distances_P = np.dot(P, init_w) - init_c
         distances_N = np.dot(N, init_w) - init_c
+        print("initial reach = ", reach)
 
         xs = distances_P >= epsilon_P
         ys = distances_N > -epsilon_N
@@ -188,6 +191,7 @@ def gurobi_solver(
         # Check and return results
         if model.status == GRB.OPTIMAL or model.status == GRB.TIME_LIMIT:
             results = {
+                "Initial reach": reach,
                 "Reach": sum(x[i].x for i in P_indices),
                 "Hyperplane w": [w[d].x for d in range(X.shape[1])],
                 "Bias c": c.x,
@@ -229,7 +233,8 @@ def cplex_solver(
     epsilon_R=epsilon_R,
     lambda_param=None,
     dataset_name='random_data',
-    run=True
+    run=True,
+    seeds=None,
 ):
     """
     Solves the wide-reach classification problem using DOcplex for given positive and negative samples.
@@ -245,7 +250,7 @@ def cplex_solver(
     X = np.vstack((P, N))
 
     initial_h = separating_hyperplane(
-        P, N, epsilon_P, epsilon_N, epsilon_R, theta, lambda_param, num_trials=10000
+        P, N, epsilon_P, epsilon_N, epsilon_R, theta, lambda_param, num_trials=10000, seeds=seeds,
     )
 
     # Update indices for P and N after combining
@@ -345,6 +350,7 @@ def cplex_solver(
         # Check and return results
         if solution:
             results = {
+                "Initial reach": reach,
                 "Reach": sum(solution.get_value(x[i]) for i in P_indices),
                 "Hyperplane w": [solution.get_value(w[d]) for d in range(X.shape[1])],
                 "Bias c": solution.get_value(c),
@@ -385,6 +391,7 @@ def scip_solver(
     lambda_param=None,
     dataset_name='random_name',
     run=True,
+    seeds=None,
 ):
     """
     Solves the wide-reach classification problem using SCIP for given positive and negative samples.
@@ -418,7 +425,7 @@ def scip_solver(
         lambda_param = (num_positive + 1) * theta1
 
     initial_h = separating_hyperplane(
-        P, N, epsilon_P, epsilon_N, epsilon_R, theta, lambda_param, num_trials=10000
+        P, N, epsilon_P, epsilon_N, epsilon_R, theta, lambda_param, num_trials=10000, seeds=seeds
     )
 
     # Create the SCIP model
@@ -431,7 +438,7 @@ def scip_solver(
         model.setRealParam('limits/time', TIME_LIMIT)
     
     # Adjusting hyperparameters
-    # model.setIntParam('randomization/randomseedshift', 42)
+    # model.setIntParam('randomization/randomhift', 42)
     # model.setRealParam('limits/gap', 0.0001)
     # model.setRealParam('limits/absgap', 0.0001)
     model.setIntParam('separating/maxrounds', -1)  # Unlimited cutting plane rounds
@@ -455,6 +462,7 @@ def scip_solver(
     # Set initial solution if available
     if initial_h is not None:
         init_w, init_c, reach = initial_h
+        print(f"Initial reach = {reach}")
         distances_P = np.dot(P, init_w) - init_c
         distances_N = np.dot(N, init_w) - init_c
 
@@ -525,6 +533,7 @@ def scip_solver(
 
         if model.getStatus() == "optimal" or model.getStatus() == "timelimit":
             results = {
+                "Initial reach": reach,
                 "Reach": sum(model.getVal(x[i]) for i in P_indices),
                 "Hyperplane w": [model.getVal(w[d]) for d in range(X.shape[1])],
                 "Bias c": model.getVal(c),
