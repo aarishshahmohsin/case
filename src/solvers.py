@@ -546,6 +546,7 @@ def scip_solver(
         else:
             results = {"Error": f"No optimal solution found. Status: {model.getStatus()}"}
 
+        model.writeStatistics(f"{dataset_name}.txt")
         model.freeProb()
         del model
         gc.collect()
