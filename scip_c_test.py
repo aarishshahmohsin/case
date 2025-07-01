@@ -1,7 +1,7 @@
 import numpy as np
 import time
-from scip_c_wrapper import call_scip_solver  # Use your new C wrapper
-from real_datasets import (
+from solvers.scip_c_wrapper import call_scip_solver  # Use your new C wrapper
+from src.datasets.real_datasets import (
     BreastCancerDataset,
     WineQualityRedDataset,
     WineQualityWhiteDataset,
@@ -11,32 +11,32 @@ from real_datasets import (
     s2,
     s3,
 )
-from synthetic_datasets import (
+from src.datasets.synthetic_datasets import (
     ClusterDataset,
     TwoClusterDataset,
     DiffusedBenchmark,
     PrismDataset,
     TruncatedNormalPrism,
 )
-from solvers_modified import separating_hyperplane
+from src.solvers.solvers import separating_hyperplane
 import pandas as pd
-from utils import plot_P_N, plot_P_N_3d
-from constants import epsilon_N, epsilon_P, epsilon_R
+from src.utils import plot_P_N, plot_P_N_3d
+from src.constants import epsilon_N, epsilon_P, epsilon_R
 
 datasets = {
     "Breast Cancer": BreastCancerDataset(),
     "Wine Quality Red": WineQualityRedDataset(),
-    "Wine Quality White": WineQualityWhiteDataset(),
+    # "Wine Quality White": WineQualityWhiteDataset(),
     "South German Credit": SouthGermanCreditDataset(),
     "Crop Mapping": CropMappingDataset(),
-    "Cluster 8": ClusterDataset(d=8),
-    "Two Cluster 8": TwoClusterDataset(d=8),
-    "Cluster": ClusterDataset(d=11),
-    "Two Cluster": TwoClusterDataset(d=11),
-    "Diffused Benchmark": DiffusedBenchmark(),
+    # "Cluster 8": ClusterDataset(d=8),
+    # "Two Cluster 8": TwoClusterDataset(d=8),
+    # "Cluster": ClusterDataset(d=11),
+    # "Two Cluster": TwoClusterDataset(d=11),
+    # "Diffused Benchmark": DiffusedBenchmark(),
     's1': s1(),
-    's2': s2(),
-    's3': s3(),
+    # 's2': s2(),
+    # 's3': s3(),
     # '360 prism': PrismDataset(num_positive=360, s=0.707, d0=2, d=11),
     # "Truncated Normal Prism": TruncatedNormalPrism(),
     # "Prism": PrismDataset(d=11),
@@ -46,6 +46,7 @@ times = 1
 results = {}
 final_res = []
 seeds = [42, 43, 44, 45, 46, 47, 48, 49, 50]
+
 
 results_df = pd.DataFrame(
     columns=["Dataset", "Solver", "Initial Reach", "Time Taken", "Final Reach"])
@@ -58,14 +59,26 @@ try:
 
             # Generate dataset
             np.random.seed(0)
-            P, N = dataset.generate()
+            # P, N = dataset.generate(normalize=True)
+            P,N = dataset.generate(normalize=True)
+            # P, N = dataset.generate()
             theta_0, theta_1, theta, lambda_param = dataset.params()
 
             # Get initial hyperplane using your existing function
             init_w, init_c, reach = separating_hyperplane(
-                P, N, epsilon_P, epsilon_N, epsilon_R, theta, lambda_param,
-                num_trials=10000, seeds=seeds
+                P,
+                N,
+                epsilon_P,
+                epsilon_N,
+                epsilon_R,
+                theta,
+                lambda_param,
+                num_trials=10000,
+                seeds=seeds,
             )
+
+            # init_w, init_c, reach = initial_h
+            print(f"aarish Initial reach = {reach}") # type: ignore
 
             # Convert numpy arrays to ensure they're the right type
             P = np.array(P, dtype=np.float64)

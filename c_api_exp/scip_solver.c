@@ -165,6 +165,18 @@ SolverResults *scip_solver(
         goto CLEANUP;
     }
 
+    retcode = SCIPsetRealParam(scip, "numerics/feastol", 1e-9);
+    retcode = SCIPsetRealParam(scip, "numerics/epsilon", 1e-12);
+
+    // retcode = SCIPsetParam(scip, "heuristics/emphasis", "off");
+    retcode = SCIPsetRealParam(scip, "limits/gap", 0.01);
+    // retcode = SCIPsetRealParam(scip, "constraints/initialsol/partial/unknrate", 1);
+
+
+
+    // retcode = SCIPsetBoolParam(scip, "presolving/usesubsol", FALSE);
+    // retcode = SCIPsetIntParam(scip, "emphasis/optimality", 1);
+
     // Include default plugins
     retcode = SCIPincludeDefaultPlugins(scip);
     if (retcode != SCIP_OKAY)
@@ -172,6 +184,7 @@ SolverResults *scip_solver(
         strcpy(results->error_msg, "Failed to include default plugins");
         goto CLEANUP;
     }
+
 
     // Create problem
     retcode = SCIPcreateProbBasic(scip, "Wide-Reach Classification");
@@ -181,17 +194,20 @@ SolverResults *scip_solver(
         goto CLEANUP;
     }
 
-    // Set output verbosity
-    if (!print_output)
-    {
-        retcode = SCIPsetIntParam(scip, "display/verblevel", 0);
-    }
+    
+   
+    printf("reached the numerical stability part\n");
 
-    // Set time limit (hardcoded to 120 as in original)
+    // Set output verbosity
+    // if (!print_output)
+    // {
+    //     retcode = SCIPsetIntParam(scip, "display/verblevel", 0);
+    // }
+
     retcode = SCIPsetRealParam(scip, "limits/time", 120);
 
     // Set additional parameters
-    retcode = SCIPsetIntParam(scip, "separating/maxrounds", -1);
+    // retcode = SCIPsetIntParam(scip, "separating/maxrounds", -1);
 
     // Create decision variables
     SCIP_VAR **x_vars = (SCIP_VAR **)malloc(num_positive * sizeof(SCIP_VAR *));
@@ -362,12 +378,10 @@ SolverResults *scip_solver(
     sprintf(filename, "%s.lp", dataset_name);
     retcode = SCIPwriteOrigProblem(scip, filename, "lp", FALSE);
 
-
     const char *SCIP_HEURISTICS[] = {
         "rens",
         "rounding",
         "fracdiving",
-        "intshifting",
         "octane",
         "feaspump",
         "localbranching",
@@ -377,6 +391,58 @@ SolverResults *scip_solver(
         NULL // Sentinel value to mark end of array
     };
 
+    // const char* important_heuristics[] = {
+    //     "alns",
+    //     "completesol",
+    //     "conflictdiving",
+    //     "dualval",
+    //     "locks",
+    //     "lpface",
+    //     "mutation",
+    //     // "intshifting",
+    //     "objpscostdiving",
+    //     "proximity",
+    //     "randrounding",
+    //     "repair",
+    // "scheduler",
+    //     "shifting",
+    //     "trivial",
+    //     "trustregion",
+    //     "zeroobj",
+    //     "zirounding",
+    //     NULL
+    // };
+
+    const char *important_heuristics[] = {
+        // "adaptivediving",
+        // "alns",
+        "intshifting",
+        // "clique",
+        "completesol",
+        // "conflictdiving",
+        // // "crossover",
+        // "distributiondivi",
+        // // "feaspump",
+        // // "fracdiving",
+        // "guideddiving",
+        // "intshifting",
+        // "linesearchdiving",
+        // "locks",
+        // "lpface",
+        // "objpscostdiving",
+        // "oneopt",
+        // "pscostdiving",
+        // "randrounding",
+        // // "rens",
+        // // "rins",
+        // "rootsoldiving",
+        // "rounding",
+        // "shifting",
+        // "veclendiving",
+        "scheduler",
+        // "zirounding",
+        NULL};
+
     if (run)
     {
 
@@ -385,7 +451,8 @@ SolverResults *scip_solver(
 
         if (disable)
         {
-            SCIPsetHeuristics(scip, SCIP_PARAMSETTING_OFF, 0); 
+            // SCIPsetHeuristics(scip, SCIP_PARAMSETTING_OFF, 0);
+            SCIPsetHeuristics(scip, SCIP_PARAMSETTING_AGGRESSIVE, 0);
             // Get all heuristic plugins from SCIP
             SCIP_HEUR **heurs = SCIPgetHeurs(scip);
             int nheurs = SCIPgetNHeurs(scip);
@@ -394,236 +461,259 @@ SolverResults *scip_solver(
             {
                 const char *heur_name = SCIPheurGetName(heurs[i]);
 
-                // Check if this heuristic is in our allowlist
-                int allow = 0;
-                for (int j = 0; SCIP_HEURISTICS[j] != NULL; ++j)
-                {
-                    if (strcmp(SCIP_HEURISTICS[j], heur_name) == 0)
-                    {
-                        allow = 1;
-                        break;
-                    }
-                }
+                //     int allow = 0;
+                //     for (int j = 0; SCIP_HEURISTICS[j] != NULL; ++j)
+                //     {
+                //         if (strcmp(SCIP_HEURISTICS[j], heur_name) == 0)
+                //         {
+                //             allow = 1;
+                //             break;
+                //         }
+                //     }
 
-                // Enable the heuristic only if it's in the list
-                if (!allow)
-                {
-                    char paramname[SCIP_MAXSTRLEN];
+                //     int allow_important = 0;
+                //     for (int j = 0; important_heuristics[j] != NULL; ++j)
+                //     {
+                //         if (strcmp(important_heuristics[j], heur_name) == 0)
+                //         {
+                //             allow_important = 1;
+                //             break;
+                //         }
+                //     }
 
-                    snprintf(paramname, sizeof(paramname), "heuristics/%s/freq", heur_name);
-                    retcode = SCIPsetIntParam(scip, paramname, 1);
-                }
+                // if (!allow && allow_important)
+                // {
+                char paramname[SCIP_MAXSTRLEN];
+
+                // frequency
+                snprintf(paramname, sizeof(paramname), "heuristics/%s/freq", heur_name);
+                retcode = SCIPsetIntParam(scip, paramname, -1);
+
+                // snprintf(paramname, sizeof(paramname), "heuristics/%s/priority", heur_name);
+                // retcode = SCIPsetIntParam(scip, paramname, -100000000);
+
+                // }
             }
+
+            int target_heuristic_index = 0;
 
             char paramname[SCIP_MAXSTRLEN];
-            snprintf(paramname, sizeof(paramname), "heuristics/%s/freq", SCIP_HEURISTICS[9]);
+            snprintf(paramname, sizeof(paramname), "heuristics/%s/freq", SCIP_HEURISTICS[target_heuristic_index]);
             retcode = SCIPsetIntParam(scip, paramname, 1);
 
+            snprintf(paramname, sizeof(paramname), "heuristics/%s/priority", SCIP_HEURISTICS[target_heuristic_index]);
+            retcode = SCIPsetIntParam(scip, paramname, 1);
+            
+            snprintf(paramname, sizeof(paramname), "heuristics/%s/freqofs", SCIP_HEURISTICS[target_heuristic_index]);
+            retcode = SCIPsetIntParam(scip, paramname, 0);
+
+            snprintf(paramname, sizeof(paramname), "heuristics/%s/maxdepth", SCIP_HEURISTICS[target_heuristic_index]);
+            retcode = SCIPsetIntParam(scip, paramname, -1);
+
+            SCIP_HEUR *heur = SCIPfindHeur(scip, SCIP_HEURISTICS[target_heuristic_index]);
+            SCIPheurSetTimingmask(heur, SCIP_HEURTIMING_BEFORENODE + SCIP_HEURTIMING_DURINGLPLOOP + SCIP_HEURTIMING_AFTERLPLOOP + SCIP_HEURTIMING_AFTERLPNODE + SCIP_HEURTIMING_AFTERPSEUDONODE + SCIP_HEURTIMING_AFTERLPPLUNGE + SCIP_HEURTIMING_AFTERPSEUDOPLUNGE);
+        }
+        else
+        {
+            SCIPsetHeuristics(scip, SCIP_PARAMSETTING_AGGRESSIVE, 0);
         }
 
-            // if (disable) {
-            //     for (int i = 0; i < 10; i++) {
-            //         SCIPsetHeurPriority(scip, SCIP_HEURISTICS[i], -1000000);
-            //         SCIPheurSetFreq(SCIP_HEURISTICS[i], -1);
-            //     }
-            //     SCIPsetHeurPriority(scip, SCIP_HEURISTICS[0], 1000000);
-            //     SCIPheurSetFreq(SCIP_HEURISTICS[0], 1);
-            // }
+        // retcode = SCIPsetIntParam(scip, "heuristics/scheduler/freq", 1);
+        // retcode = SCIPsetIntParam(scip, "heuristics/intshifting/freq", 1);
+        // retcode = SCIPsetIntParam(scip, "heuristics/alns/freq", 1);
+        // retcode = SCIPsetIntParam(scip, "heuristics/intshifting/freq", 1);
+        // retcode = SCIPsetIntParam(scip, "heuristics/completesol/freq", 1);
+        // retcode = SCIPsetRealParam(scip, "heuristics/completesol/maxunknownrate", 1);
+        // retcode = SCIPsetBoolParam(scip, "heuristics/completesol/addallsols", TRUE);
 
-            // const int NUM_HEURISTICS = 10;  // Number of heuristics in the array
 
-            // int index = 9;
-            // const char* heurname = SCIP_HEURISTICS[index];
-            // printf("%s", heurname);
-            // char paramname[256];
-            // SCIP_RETCODE retcode;
+        // Create and set partial solution if initial values are provided
+        int USE_SOLUTION = 1;
+        if (init_w != NULL && initial_xs != NULL && initial_ys != NULL && USE_SOLUTION)
+        {
+            SCIP_SOL *partial_sol;
+            SCIP_Bool partial;
 
-            // // Set: priority = 1000000
-            // snprintf(paramname, sizeof(paramname), "heuristics/%s/priority", heurname);
-            // retcode = SCIPsetIntParam(scip, paramname, 1000000);
+            // printf("Applying initial solution with reach=%.2f\n", initial_reach);
+            // printf("hello aarish\n");
 
-            // // Set: maxdepth = -1
-            // snprintf(paramname, sizeof(paramname), "heuristics/%s/maxdepth", heurname);
-            // retcode = SCIPsetIntParam(scip, paramname, -1);
+            // Create partial solution
+            // retcode = SCIPcreatePartialSol(scip, &partial_sol, NULL);
+            // printf("check 1\n");
+            // retcode = SCIPcreateSol(scip, &partial_sol, NULL);
+            retcode = SCIPcreateSol(scip, &partial_sol, NULL);
+            // retcode = SCIPcreatePartialSol(scip, &partial_sol, NULL);
+            // printf("check 2\n");
 
-            // // Set: freq = 1
-            // snprintf(paramname, sizeof(paramname), "heuristics/%s/freq", heurname);
-            // retcode = SCIPsetIntParam(scip, paramname, 1);
-
-            // Make RENS extremely aggressive
-            // retcode = SCIPsetIntParam(scip, "heuristics/rens/priority", 1000000);
-            // retcode = SCIPsetRealParam(scip, "heuristics/rens/minfixingrate", 0);
-            // retcode = SCIPsetIntParam(scip, "heuristics/rens/maxdepth", -1);
-            // retcode = SCIPsetRealParam(scip, "heuristics/rens/lplimfac", 10);
-            // retcode = SCIPsetIntParam(scip, "heuristics/rens/freq", 1);
-            // retcode = SCIPsetLongintParam(scip, "heuristics/rens/maxnodes", 100000);
-            // retcode = SCIPsetRealParam(scip, "heuristics/rens/minimprove", 0.0);
-
-            // Create and set partial solution if initial values are provided
-            if (init_w != NULL && initial_xs != NULL && initial_ys != NULL)
-            {
-                SCIP_SOL *partial_sol;
-                SCIP_Bool partial;
-
-                printf("Applying initial solution with reach=%.2f\n", initial_reach);
-
-                // Create partial solution
-                retcode = SCIPcreatePartialSol(scip, &partial_sol, NULL);
-                if (retcode != SCIP_OKAY)
-                {
-                    printf("Warning: Could not create partial solution\n");
-                }
-                else
-                {
-                    // Set x variables in partial solution
-                    for (int i = 0; i < num_positive; i++)
-                    {
-                        retcode = SCIPsetSolVal(scip, partial_sol, x_vars[i], (double)initial_xs[i]);
-                        if (retcode != SCIP_OKAY)
-                        {
-                            printf("Warning: Could not set x[%d] in partial solution\n", i);
-                        }
-                    }
-
-                    // Set y variables in partial solution
-                    for (int j = 0; j < num_negative; j++)
-                    {
-                        retcode = SCIPsetSolVal(scip, partial_sol, y_vars[j], (double)initial_ys[j]);
-                        if (retcode != SCIP_OKAY)
-                        {
-                            printf("Warning: Could not set y[%d] in partial solution\n", j);
-                        }
-                    }
-
-                    // Set w variables in partial solution
-                    for (int d = 0; d < n_features; d++)
-                    {
-                        retcode = SCIPsetSolVal(scip, partial_sol, w_vars[d], init_w[d]);
-                        if (retcode != SCIP_OKAY)
-                        {
-                            printf("Warning: Could not set w[%d] in partial solution\n", d);
-                        }
-                    }
-
-                    // Set c variable in partial solution
-                    retcode = SCIPsetSolVal(scip, partial_sol, c_var, init_c);
-                    if (retcode != SCIP_OKAY)
-                    {
-                        printf("Warning: Could not set c in partial solution\n");
-                    }
-
-                    // Calculate and set V variable in partial solution
-                    double v_val = 0.0;
-                    double temp_sum = 0.0;
-                    for (int i = 0; i < num_positive; i++)
-                    {
-                        temp_sum += initial_xs[i];
-                    }
-                    temp_sum *= (theta - 1.0);
-
-                    for (int j = 0; j < num_negative; j++)
-                    {
-                        temp_sum += theta * initial_ys[j];
-                    }
-                    temp_sum += theta * epsilon_R;
-
-                    v_val = fmax(0.0, temp_sum);
-                    retcode = SCIPsetSolVal(scip, partial_sol, V_var, v_val);
-                    if (retcode != SCIP_OKAY)
-                    {
-                        printf("Warning: Could not set V in partial solution\n");
-                    }
-
-                    // Try to add the partial solution
-                    SCIP_Bool stored;
-                    retcode = SCIPaddSolFree(scip, &partial_sol, &stored);
-
-                    if (retcode != SCIP_OKAY || !stored)
-                    {
-                        printf("Warning: Could not add partial solution as heuristic (retcode: %d, stored: %d)\n",
-                               retcode, stored);
-                    }
-                    else
-                    {
-                        printf("Successfully added partial solution as heuristic\n");
-                    }
-                }
-            }
-
-            // Solve the problem
-            clock_t start_time = clock();
-            retcode = SCIPsolve(scip);
-            clock_t end_time = clock();
-
-            results->time_taken = ((double)(end_time - start_time)) / CLOCKS_PER_SEC;
+            SCIP_Bool stored;
 
             if (retcode != SCIP_OKAY)
             {
-                strcpy(results->error_msg, "Optimization failed");
-                goto CLEANUP;
-            }
-
-            SCIP_STATUS status = SCIPgetStatus(scip);
-
-            if (status == SCIP_STATUS_OPTIMAL || status == SCIP_STATUS_TIMELIMIT)
-            {
-                SCIP_SOL *sol = SCIPgetBestSol(scip);
-
-                SCIPprintStatistics(scip, NULL);
-
-                if (sol != NULL)
-                {
-                    results->status = (status == SCIP_STATUS_OPTIMAL) ? 0 : 1;
-
-                    // Extract reach
-                    results->reach = 0.0;
-                    for (int i = 0; i < num_positive; i++)
-                    {
-                        results->reach += SCIPgetSolVal(scip, sol, x_vars[i]);
-                    }
-
-                    // Extract hyperplane parameters
-                    results->hyperplane_w = (double *)malloc(n_features * sizeof(double));
-                    for (int d = 0; d < n_features; d++)
-                    {
-                        results->hyperplane_w[d] = SCIPgetSolVal(scip, sol, w_vars[d]);
-                    }
-
-                    // Extract bias
-                    results->bias_c = SCIPgetSolVal(scip, sol, c_var);
-
-                    // Extract x values
-                    results->x_vals = (double *)malloc(num_positive * sizeof(double));
-                    for (int i = 0; i < num_positive; i++)
-                    {
-                        results->x_vals[i] = SCIPgetSolVal(scip, sol, x_vars[i]);
-                    }
-
-                    // Extract y values
-                    results->y_vals = (double *)malloc(num_negative * sizeof(double));
-                    for (int j = 0; j < num_negative; j++)
-                    {
-                        results->y_vals[j] = SCIPgetSolVal(scip, sol, y_vars[j]);
-                    }
-
-                    // Extract precision violation
-                    results->precision_violation_v = SCIPgetSolVal(scip, sol, V_var);
-
-                    // Extract node count
-                    results->node_count = SCIPgetNNodes(scip);
-                }
-                else
-                {
-                    strcpy(results->error_msg, "No solution found");
-                    results->status = -1;
-                }
+                printf("Warning: Could not create partial solution\n");
             }
             else
             {
-                sprintf(results->error_msg, "No optimal solution found. Status: %d", status);
+                // // Set x variables in partial solution
+                for (int i = 0; i < num_positive; i++)
+                {
+                    retcode = SCIPsetSolVal(scip, partial_sol, x_vars[i], (double)initial_xs[i]);
+                    if (retcode != SCIP_OKAY)
+                    {
+                        printf("Warning: Could not set x[%d] in partial solution\n", i);
+                    }
+                }
+
+                // Set y variables in partial solution
+                for (int j = 0; j < num_negative; j++)
+                {
+                    retcode = SCIPsetSolVal(scip, partial_sol, y_vars[j], (double)initial_ys[j]);
+                    if (retcode != SCIP_OKAY)
+                    {
+                        printf("Warning: Could not set y[%d] in partial solution\n", j);
+                    }
+                }
+
+                // Set w variables in partial solution
+                for (int d = 0; d < n_features; d++)
+                {
+                    retcode = SCIPsetSolVal(scip, partial_sol, w_vars[d], init_w[d]);
+                    if (retcode != SCIP_OKAY)
+                    {
+                        printf("Warning: Could not set w[%d] in partial solution\n", d);
+                    }
+                }
+
+                // Set c variable in partial solution
+                retcode = SCIPsetSolVal(scip, partial_sol, c_var, init_c);
+                if (retcode != SCIP_OKAY)
+                {
+                    printf("Warning: Could not set c in partial solution\n");
+                }
+
+
+                // // Calculate and set V variable in partial solution
+                double v_val = 0.0;
+                double temp_sum = 0.0;
+                for (int i = 0; i < num_positive; i++)
+                {
+                    temp_sum += initial_xs[i];
+                }
+                temp_sum *= (theta - 1.0);
+
+                for (int j = 0; j < num_negative; j++)
+                {
+                    temp_sum += theta * initial_ys[j];
+                }
+                temp_sum += theta * epsilon_R;
+
+                v_val = fmax(0.0, temp_sum);
+                retcode = SCIPsetSolVal(scip, partial_sol, V_var, v_val);
+                if (retcode != SCIP_OKAY)
+                {
+                    printf("Warning: Could not set V in partial solution\n");
+                }
+
+
+                // Try to add the partial solution
+                // SCIP_Bool stored;
+                // retcode = SCIPaddSolFree(scip, &partial_sol, &stored);
+                // SCIPtrySolFree(scip, SCIP_SOL **sol, unsigned int printreason, unsigned int completely, unsigned int checkbounds, unsigned int checkintegrality, unsigned int checklprows, unsigned int *stored)
+                // retcode = SCIPtrySolFree(scip, &partial_sol, TRUE, TRUE, 
+                    // FALSE, FALSE, FALSE, &stored);
+
+
+                retcode = SCIPaddSolFree(scip, &partial_sol, &stored);
+                // retcode = SCIPaddSol(scip, partial_sol, 0);
+
+                // retcode = SCIPtrySol(scip, partial_sol, 
+                //                          TRUE,  // not check feasibility
+                //                          FALSE,   // check bounds
+                //                          FALSE,   // check domain
+                //                          FALSE,   // print reason
+                //                         //  SCIPprintTreeStatistics(SCIP *scip, FILE *file)
+                //                         FALSE,
+                //                          &stored);
+
+                // retcode = SCIPaddSol(scip, partial_sol, 0);
+        
+        
+            }
+        }
+
+        // Solve the problem
+        clock_t start_time = clock();
+        retcode = SCIPsolve(scip);
+        clock_t end_time = clock();
+
+        results->time_taken = ((double)(end_time - start_time)) / CLOCKS_PER_SEC;
+
+        if (retcode != SCIP_OKAY)
+        {
+            strcpy(results->error_msg, "Optimization failed");
+            goto CLEANUP;
+        }
+
+        SCIP_STATUS status = SCIPgetStatus(scip);
+
+        if (status == SCIP_STATUS_OPTIMAL || status == SCIP_STATUS_TIMELIMIT)
+        {
+            SCIP_SOL *sol = SCIPgetBestSol(scip);
+
+            SCIPprintStatistics(scip, NULL);
+
+            if (sol != NULL)
+            {
+                results->status = (status == SCIP_STATUS_OPTIMAL) ? 0 : 1;
+
+                // Extract reach
+                results->reach = 0.0;
+                for (int i = 0; i < num_positive; i++)
+                {
+                    results->reach += SCIPgetSolVal(scip, sol, x_vars[i]);
+                }
+
+                // Extract hyperplane parameters
+                results->hyperplane_w = (double *)malloc(n_features * sizeof(double));
+                for (int d = 0; d < n_features; d++)
+                {
+                    results->hyperplane_w[d] = SCIPgetSolVal(scip, sol, w_vars[d]);
+                }
+
+                // Extract bias
+                results->bias_c = SCIPgetSolVal(scip, sol, c_var);
+
+                // Extract x values
+                results->x_vals = (double *)malloc(num_positive * sizeof(double));
+                for (int i = 0; i < num_positive; i++)
+                {
+                    results->x_vals[i] = SCIPgetSolVal(scip, sol, x_vars[i]);
+                }
+
+                // Extract y values
+                results->y_vals = (double *)malloc(num_negative * sizeof(double));
+                for (int j = 0; j < num_negative; j++)
+                {
+                    results->y_vals[j] = SCIPgetSolVal(scip, sol, y_vars[j]);
+                }
+
+                // Extract precision violation
+                results->precision_violation_v = SCIPgetSolVal(scip, sol, V_var);
+
+                // Extract node count
+                results->node_count = SCIPgetNNodes(scip);
+            }
+            else
+            {
+                strcpy(results->error_msg, "No solution found");
                 results->status = -1;
             }
         }
+        else
+        {
+            sprintf(results->error_msg, "No optimal solution found. Status: %d", status);
+            results->status = -1;
+        }
+    }
 
 CLEANUP:
     // Release constraints

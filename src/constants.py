@@ -1,7 +1,7 @@
 DATA_PATH = "/Users/aarish/case/data"
 TIME_LIMIT = 2 * 60 
 RAM_LIMIT = 4096
-PRINT_OUTPUT = False
+PRINT_OUTPUT = True
 D_MAX = 8
 # epsilon_R = 0.001
 # epsilon_P = 0.01

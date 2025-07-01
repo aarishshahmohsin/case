@@ -1,6 +1,6 @@
 from scipy.special import factorial
 from scipy.stats import truncnorm
-from utils import Dataset
+from solvers.utils import Dataset
 from constants import D_MAX
 import numpy as np
 from math import factorial
@@ -27,6 +27,7 @@ class ClusterDataset(Dataset):
         return points * s
 
     def _generate(self):
+        np.random.seed(0)
         n_negative = 4 * self.n // 5
         n_positive_simplex = self.n // 10
         n_positive_remaining = self.n // 10
@@ -72,6 +73,7 @@ class TwoClusterDataset(Dataset):
         return np.ones(d) - points
 
     def _generate(self):
+        np.random.seed(0)
         n_negative = 4 * self.n // 5
         n_positive_simplex = self.n // 20
         n_positive_simplex_opp = self.n // 20
@@ -121,6 +123,7 @@ class DiffusedBenchmark(Dataset):
         return np.random.uniform(0, 1, size=(n, d))
 
     def _generate(self):
+        np.random.seed(0)
         n_negative = self.n // 2
         n_positive = self.n // 2
 
@@ -168,6 +171,7 @@ class PrismDataset(Dataset):
  
         
     def _generate(self):
+        np.random.seed(0)
         assert self.d > self.d0, "Total dimension d must be greater than d0"
 
         p_in = int(self.num_positive * (1 - self.positive_background_ratio))
@@ -191,10 +195,6 @@ class PrismDataset(Dataset):
 
 
               
-    def generate(self):
-        return self.P, self.N
-    
-    
 
 
 class TruncatedNormalPrism(Dataset):
@@ -251,6 +251,7 @@ class TruncatedNormalPrism(Dataset):
                 return point
     
     def _generate(self):
+        np.random.seed(0)
         """Generate the dataset with positive and negative samples."""
         # Generate negative samples (uniform in [0,1]^d)
         self.X_negative = np.random.uniform(0, 1, (self.num_negative, self.d))
@@ -312,13 +313,7 @@ class TruncatedNormalPrism(Dataset):
             np.ones(self.num_positive)
         ))
         
-    def generate(self):
-        """Return positive and negative samples separately."""
-        positive_mask = self.y == 1
-        negative_mask = self.y == 0
-        self.P = self.X[positive_mask]
-        self.N = self.X[negative_mask]
-        return self.P, self.N
+  
     
     def get_dataset(self):
         """Return the complete dataset (X, y)."""

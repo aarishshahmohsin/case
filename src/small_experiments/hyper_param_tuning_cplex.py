@@ -1,5 +1,5 @@
 import numpy as np
-from real_datasets import (
+from src.real_datasets import (
     BreastCancerDataset,
     WineQualityRedDataset,
     WineQualityWhiteDataset,
@@ -7,31 +7,31 @@ from real_datasets import (
     CropMappingDataset,
     s1, s2, s3
 )
-from synthetic_datasets import (
+from src.synthetic_datasets import (
     ClusterDataset,
     TwoClusterDataset,
     DiffusedBenchmark,
     PrismDataset,
     TruncatedNormalPrism,
 )
-from solvers import cplex_solver
+from src.solvers import cplex_solver
 import os
 import subprocess
 import re
 
 datasets = {
-    # "Breast Cancer": BreastCancerDataset(),
-    # "Wine Quality Red": WineQualityRedDataset(),
-    # "Wine Quality White": WineQualityWhiteDataset(),
-    # "South German Credit": SouthGermanCreditDataset(),
-    # "Crop Mapping": CropMappingDataset(),
-    # "Cluster 8": ClusterDataset(d=8),
-    # "Two Cluster 8": TwoClusterDataset(d=8),
-    # "Cluster": ClusterDataset(d=11),
-    # "Two Cluster": TwoClusterDataset(d=11),
-    # "Diffused Benchmark": DiffusedBenchmark(),
-    # "Prism": PrismDataset(),
-    # "Truncated Normal Prism": TruncatedNormalPrism(),
+    "Breast Cancer": BreastCancerDataset(),
+    "Wine Quality Red": WineQualityRedDataset(),
+    "Wine Quality White": WineQualityWhiteDataset(),
+    "South German Credit": SouthGermanCreditDataset(),
+    "Crop Mapping": CropMappingDataset(),
+    "Cluster 8": ClusterDataset(d=8),
+    "Two Cluster 8": TwoClusterDataset(d=8),
+    "Cluster": ClusterDataset(d=11),
+    "Two Cluster": TwoClusterDataset(d=11),
+    "Diffused Benchmark": DiffusedBenchmark(),
+    "Prism": PrismDataset(),
+    "Truncated Normal Prism": TruncatedNormalPrism(),
 }
 
 ds_list = []

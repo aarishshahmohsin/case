@@ -1,5 +1,5 @@
 from constants import DATA_PATH
-from utils import Dataset
+from solvers.utils import Dataset
 import os
 
 

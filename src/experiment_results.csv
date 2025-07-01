@@ -1,4 +1,0 @@
-Dataset,Solver,Initial Reach,Time Taken,Final Reach
-Breast Cancer,SCIP_C,166,0.071933,357.0
-South German Credit,SCIP_C,29,119.994129,29.0
-Prism,SCIP_C,30,120.527502,34.0

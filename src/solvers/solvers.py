@@ -32,6 +32,7 @@ def separating_hyperplane(P, N, eps_P, eps_N, eps_R, theta, lamb, num_trials=100
     Returns:
         tuple: Optimal hyperplane (w, c, reach), where w is the normal vector, c is the bias, and reach is the number of true positives.
     """
+    # if seeds: np.random.seed(seed=50)
     if seeds: np.random.seed(seed=seeds)
     dim = P.shape[1]  # Dimension of the feature space
     L = -np.inf
@@ -45,6 +46,7 @@ def separating_hyperplane(P, N, eps_P, eps_N, eps_R, theta, lamb, num_trials=100
         # Choose a random point c in the unit hypercube
         c = np.random.uniform(0, 1, dim)
         c = -np.dot(w, c)
+        c = 0 
 
         # Compute x_tilde and y_tilde arrays
         distances_P = np.dot(P, w) - c
@@ -65,6 +67,7 @@ def separating_hyperplane(P, N, eps_P, eps_N, eps_R, theta, lamb, num_trials=100
         if L_tilde > L:
             L = L_tilde
             best_h = (w, c, np.sum(x_tilde))
+            # print(c)
 
     return best_h
 
@@ -124,14 +127,15 @@ def gurobi_solver(
     #     model.setParam("MemLimit", 1024)
 
     # Decision variables
-    x = model.addVars(num_positive, vtype=GRB.BINARY, name="x")
-    y = model.addVars(len(N_indices), vtype=GRB.BINARY, name="y")
+    # x = model.addVars(num_positive, vtype=GRB.BINARY, name="x")
+    # y = model.addVars(len(N_indices), vtype=GRB.BINARY, name="y")
+    x = model.addVars(num_positive, lb=0, ub=1, name="x")
+    y = model.addVars(len(N_indices), lb=0, ub=1, name="y")
     w = model.addVars(X.shape[1], lb=-GRB.INFINITY, name="w")
     c = model.addVar(lb=-GRB.INFINITY, name="c")
     V = model.addVar(lb=0, name="V")
 
-
-    # Adjusting hyperparameters 
+    # Adjusting hyperparameters
     # model.setParam("Seed", 0)  # Fixed random seed
     # model.setParam("MIPFocus", 0) # Balanced search
     # model.setParam("MIPGap", 0.0001)  # Optimality gap
@@ -288,8 +292,10 @@ def cplex_solver(
     #     model.parameters.workmem = 4096
 
     # Decision variables
-    x = model.binary_var_list(num_positive, name="x")
-    y = model.binary_var_list(len(N_indices), name="y")
+    # x = model.binary_var_list(num_positive, name="x")
+    x = model.continuous_var_list(num_positive,lb=0, ub=1, name="x")
+    # y = model.binary_var_list(len(N_indices), name="y")
+    y = model.continuous_var_list(len(N_indices), lb=0, ub=1,name="y")
     w = model.continuous_var_list(X.shape[1], lb=-model.infinity, name="w")
     c = model.continuous_var(lb=-model.infinity, name="c")
     V = model.continuous_var(lb=0, name="V")
@@ -361,6 +367,9 @@ def cplex_solver(
                 "Time taken": end_time - start_time,
             }
         else:
+            print([soluti[d] for d in range(len(P))])
+            # print([solution.get_value(y[d]) for d in range(len(N))])
+
             results = {"Error": "No optimal solution found."}
 
         # dispose
@@ -375,7 +384,6 @@ def cplex_solver(
     else:
         model.export_as_lp(f'{dataset_name}.lp')
         return None
-
 
 
 def scip_solver(
@@ -441,16 +449,21 @@ def scip_solver(
     # model.setIntParam('randomization/randomhift', 42)
     # model.setRealParam('limits/gap', 0.0001)
     # model.setRealParam('limits/absgap', 0.0001)
-    model.setIntParam('separating/maxrounds', -1)  # Unlimited cutting plane rounds
+    # # model.setIntParam('separating/maxrounds', -1)  # Unlimited cutting plane rounds
+    # model.setParam("numerics/feastol", 1e-10)
+    model.setParam("numerics/epsilon", 1e-5)
+
     
     # Decision variables
     x = {}
     for i in P_indices:
-        x[i] = model.addVar(vtype="B", name=f"x_{i}")
+        x[i] = model.addVar(lb=0, ub=1, name=f"x_{i}")
+        # x[i] = model.addVar(vtype="B", name=f"x_{i}")
     
     y = {}
     for j in range(len(N_indices)):
-        y[j] = model.addVar(vtype="B", name=f"y_{j}")
+        y[j] = model.addVar(lb=0, ub=1, name=f"y_{j}")
+        # y[j] = model.addVar(vtype="B", name=f"y_{j}")
     
     w = {}
     for d in range(X.shape[1]):

@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
+from mpl_toolkits.mplot3d import Axes3D
 
 class Dataset:
     def __init__(self):
@@ -30,17 +30,30 @@ class Dataset:
 
         self.y = np.hstack([y_negative, y_positive])
 
-    def generate(self):
-        positive_mask = self.y == 1
-        negative_mask = self.y == 0
-        self.P = self.X[positive_mask]
-        self.N = self.X[negative_mask]
+    def generate(self, normalize=False):
+        if not hasattr(self, 'P'):
+            positive_mask = self.y == 1
+            negative_mask = self.y == 0
+            self.P = self.X[positive_mask]
+            self.N = self.X[negative_mask]
+
+        if normalize:
+            self.P = self._normalize_unit_sphere(self.P)
+            self.N = self._normalize_unit_sphere(self.N)
+
         return self.P, self.N
 
     def params(self):
         self.theta = self.theta0 / self.theta1
         self.lambda_param = (len(self.P) + 1) * self.theta1
         return (self.theta0, self.theta1, self.theta, self.lambda_param)
+
+    def _normalize_unit_sphere(self, X):
+        X = np.hstack((X, np.ones((X.shape[0], 1))))
+        row_norms = np.linalg.norm(X, axis=1, keepdims=True)
+        X = X / row_norms
+        return X
+
 
 
 def plot_P_N(P, N):
@@ -69,18 +82,8 @@ def plot_P_N(P, N):
     plt.grid()
     plt.show()
 
-import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-
+    
 def plot_P_N_3d(P, N):
-    """
-    3D scatter plot for positive and negative samples.
-
-    Args:
-        P: np.ndarray of shape (n_pos, 3) - Positive samples
-        N: np.ndarray of shape (n_neg, 3) - Negative samples
-    """
     X = np.vstack((P, N))
     y = np.hstack((np.ones(len(P)), np.zeros(len(N))))
 
@@ -112,3 +115,9 @@ def plot_P_N_3d(P, N):
     ax.legend()
     plt.grid()
     plt.show()
+
+
+def compute_reach(P, w, c, epsilon_P):
+    tau = P @ w - c  # τ(s) = s^T w - c
+    consistent = tau >= epsilon_P
+    return np.sum(consistent)

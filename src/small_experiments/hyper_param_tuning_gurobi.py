@@ -18,7 +18,6 @@ import os
 import subprocess
 import re
 
-# Define the datasets
 datasets = {
     "Breast Cancer": BreastCancerDataset(),
     "Wine Quality Red": WineQualityRedDataset(),
