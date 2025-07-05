@@ -2,6 +2,7 @@ import gurobipy as gp
 from docplex.mp.model import Model
 from gurobipy import GRB
 
+
 def check_gurobi_precision():
     model = gp.Model("precision_test")
     x = model.addVar(name="x")
@@ -30,7 +31,6 @@ def check_gurobi_precision():
         print("No optimal solution found.")
 
 
-
 def check_docplex_precision():
     model = Model("precision_test")
     x = model.continuous_var(name="x")
@@ -57,6 +57,7 @@ def check_docplex_precision():
             print(f"DOcplex uses an unknown format. Matching digits: {matching_digits}")
     else:
         print("No optimal solution found.")
+
 
 check_docplex_precision()
 check_gurobi_precision()

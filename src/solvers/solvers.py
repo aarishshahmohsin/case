@@ -16,7 +16,9 @@ from constants import (
 from solvers.scip_c_wrapper import call_scip_solver
 
 
-def separating_hyperplane(P, N, eps_P, eps_N, eps_R, theta, lamb, num_trials=10000, seeds=None):
+def separating_hyperplane(
+    P, N, eps_P, eps_N, eps_R, theta, lamb, num_trials=10000, seeds=None
+):
     """
     Finds the initial separating hyperplane using the provided algorithm.
 
@@ -33,7 +35,8 @@ def separating_hyperplane(P, N, eps_P, eps_N, eps_R, theta, lamb, num_trials=100
     Returns:
         tuple: Optimal hyperplane (w, c, reach), where w is the normal vector, c is the bias, and reach is the number of true positives.
     """
-    if seeds: np.random.seed(seed=seeds)
+    if seeds:
+        np.random.seed(seed=seeds)
     dim = P.shape[1]  # Dimension of the feature space
     L = -np.inf
     best_h = (np.zeros(dim), 0, 0)
@@ -46,7 +49,7 @@ def separating_hyperplane(P, N, eps_P, eps_N, eps_R, theta, lamb, num_trials=100
         # Choose a random point c in the unit hypercube
         c = np.random.uniform(0, 1, dim)
         c = -np.dot(w, c)
-        c = 0 
+        c = 0
 
         # Compute x_tilde and y_tilde arrays
         distances_P = np.dot(P, w) - c
@@ -82,7 +85,7 @@ def gurobi_solver(
     epsilon_N=epsilon_N,
     epsilon_R=epsilon_R,
     lambda_param=None,
-    dataset_name='random_name',
+    dataset_name="random_name",
     run=True,
     seeds=None,
 ):
@@ -109,9 +112,17 @@ def gurobi_solver(
         lambda_param = (num_positive + 1) * theta1
 
     initial_h = separating_hyperplane(
-        P, N, epsilon_P, epsilon_N, epsilon_R, theta, lambda_param, num_trials=10000, seeds=seeds
+        P,
+        N,
+        epsilon_P,
+        epsilon_N,
+        epsilon_R,
+        theta,
+        lambda_param,
+        num_trials=10000,
+        seeds=seeds,
     )
-       # Create the Gurobi model
+    # Create the Gurobi model
     model = GurobiModel("Wide-Reach Classification")
     env = Env()
 
@@ -194,9 +205,9 @@ def gurobi_solver(
                 "Reach": sum(x[i].x for i in P_indices),
                 "Hyperplane w": [w[d].x for d in range(X.shape[1])],  # type: ignore
                 "Bias c": c.x,  # type: ignore
-                "X": [x[d].x for d in range(len(P))], # type: ignore
-                "Y": [y[d].x for d in range(len(N))], # type: ignore
-                "Precision Violation V": V.x, # type: ignore
+                "X": [x[d].x for d in range(len(P))],  # type: ignore
+                "Y": [y[d].x for d in range(len(N))],  # type: ignore
+                "Precision Violation V": V.x,  # type: ignore
                 "Node Count": model.NodeCount,
                 "Time taken": end_time - start_time,
             }
@@ -231,7 +242,7 @@ def cplex_solver(
     epsilon_N=epsilon_N,
     epsilon_R=epsilon_R,
     lambda_param=None,
-    dataset_name='random_data',
+    dataset_name="random_data",
     run=True,
     seeds=None,
 ):
@@ -249,7 +260,15 @@ def cplex_solver(
     X = np.vstack((P, N))
 
     initial_h = separating_hyperplane(
-        P, N, epsilon_P, epsilon_N, epsilon_R, theta, lambda_param, num_trials=10000, seeds=seeds,
+        P,
+        N,
+        epsilon_P,
+        epsilon_N,
+        epsilon_R,
+        theta,
+        lambda_param,
+        num_trials=10000,
+        seeds=seeds,
     )
 
     # Update indices for P and N after combining
@@ -272,14 +291,13 @@ def cplex_solver(
         model.context.solver.log_output = False
         model.parameters.mip.display = 0
 
-    # Adjusting hyperparameters 
+    # Adjusting hyperparameters
     # model.parameters.randomseed = 42 # Fixed random seed
     # model.parameters.emphasis.mip = 4 # hidden feasiblity
     # model.parameters.mip.tolerances.mipgap = 0.0001  # Optimality gap
     # model.parameters.mip.tolerances.absmipgap = 0.0001  # Absolute gap
     # mip limits cutpasses -1
-    model.parameters.mip.limits.cutpasses= -1  # types: ignore
-
+    model.parameters.mip.limits.cutpasses = -1  # types: ignore
 
     if TIME_LIMIT:
         model.set_time_limit(time_limit=TIME_LIMIT)
@@ -288,9 +306,9 @@ def cplex_solver(
 
     # Decision variables
     # x = model.binary_var_list(num_positive, name="x")
-    x = model.continuous_var_list(num_positive,lb=0, ub=1, name="x")
+    x = model.continuous_var_list(num_positive, lb=0, ub=1, name="x")
     # y = model.binary_var_list(len(N_indices), name="y")
-    y = model.continuous_var_list(len(N_indices), lb=0, ub=1,name="y")
+    y = model.continuous_var_list(len(N_indices), lb=0, ub=1, name="y")
     w = model.continuous_var_list(X.shape[1], lb=-model.infinity, name="w")
     c = model.continuous_var(lb=-model.infinity, name="c")
     V = model.continuous_var(lb=0, name="V")
@@ -375,7 +393,7 @@ def cplex_solver(
         return results
 
     else:
-        model.export_as_lp(f'{dataset_name}.lp')
+        model.export_as_lp(f"{dataset_name}.lp")
         return None
 
 
@@ -390,7 +408,7 @@ def scip_solver(
     epsilon_N=epsilon_N,
     epsilon_R=epsilon_R,
     lambda_param=None,
-    dataset_name='random_name',
+    dataset_name="random_name",
     run=True,
     seeds=None,
 ):
@@ -420,13 +438,21 @@ def scip_solver(
 
     P_indices = range(num_positive)
     N_indices = range(num_positive, X.shape[0])
-    
+
     # Parameters
     if not lambda_param:
         lambda_param = (num_positive + 1) * theta1
 
     initial_h = separating_hyperplane(
-        P, N, epsilon_P, epsilon_N, epsilon_R, theta, lambda_param, num_trials=10000, seeds=seeds
+        P,
+        N,
+        epsilon_P,
+        epsilon_N,
+        epsilon_R,
+        theta,
+        lambda_param,
+        num_trials=10000,
+        seeds=seeds,
     )
 
     # Create the SCIP model
@@ -434,10 +460,10 @@ def scip_solver(
 
     if not PRINT_OUTPUT:
         model.hideOutput()
-    
+
     if TIME_LIMIT:
-        model.setRealParam('limits/time', TIME_LIMIT)
-    
+        model.setRealParam("limits/time", TIME_LIMIT)
+
     # Adjusting hyperparameters
     # model.setIntParam('randomization/randomhift', 42)
     # model.setRealParam('limits/gap', 0.0001)
@@ -446,22 +472,21 @@ def scip_solver(
     # model.setParam("numerics/feastol", 1e-10)
     model.setParam("numerics/epsilon", 1e-5)
 
-    
     # Decision variables
     x = {}
     for i in P_indices:
         x[i] = model.addVar(lb=0, ub=1, name=f"x_{i}")
         # x[i] = model.addVar(vtype="B", name=f"x_{i}")
-    
+
     y = {}
     for j in range(len(N_indices)):
         y[j] = model.addVar(lb=0, ub=1, name=f"y_{j}")
         # y[j] = model.addVar(vtype="B", name=f"y_{j}")
-    
+
     w = {}
     for d in range(X.shape[1]):
         w[d] = model.addVar(lb=None, ub=None, name=f"w_{d}")
-    
+
     c = model.addVar(lb=None, ub=None, name="c")
     V = model.addVar(lb=0, name="V")
 
@@ -474,22 +499,27 @@ def scip_solver(
 
         xs = distances_P >= epsilon_P
         ys = distances_N > -epsilon_N
-    
-        
+
     # Constraint: Precision constraint violation
-    precision_expr = (theta - 1) * quicksum(x[i] for i in P_indices) + \
-                    theta * quicksum(y[j] for j in range(len(N_indices))) + \
-                    theta * epsilon_R
-    
+    precision_expr = (
+        (theta - 1) * quicksum(x[i] for i in P_indices)
+        + theta * quicksum(y[j] for j in range(len(N_indices)))
+        + theta * epsilon_R
+    )
+
     model.addCons(V >= precision_expr, name="PrecisionConstraint")
 
     # Constraints: Classification constraints for positive samples
     for i, p_idx in enumerate(P_indices):
-        pos_expr = 1 + quicksum(w[d] * X[p_idx, d] for d in range(X.shape[1])) - c - epsilon_P
+        pos_expr = (
+            1 + quicksum(w[d] * X[p_idx, d] for d in range(X.shape[1])) - c - epsilon_P
+        )
         model.addCons(x[i] <= pos_expr, name=f"Positive_{i}")
 
     for j, n_idx in enumerate(N_indices):
-        neg_expr = quicksum(w[d] * X[n_idx, d] for d in range(X.shape[1])) - c + epsilon_N
+        neg_expr = (
+            quicksum(w[d] * X[n_idx, d] for d in range(X.shape[1])) - c + epsilon_N
+        )
         model.addCons(y[j] >= neg_expr, name=f"Negative_{j}")
 
     objective = quicksum(x[i] for i in P_indices) - lambda_param * V
@@ -506,34 +536,35 @@ def scip_solver(
 
             xs = distances_P >= epsilon_P
             ys = distances_N > -epsilon_N
-            
+
             print(f"Applying initial solution with reach={reach}")
-            
+
             sol = model.createPartialSol()
-            
+
             for i in P_indices:
                 model.setSolVal(sol, x[i], 1.0 if xs[i] else 0.0)
-            
+
             for j in range(len(N_indices)):
                 model.setSolVal(sol, y[j], 1.0 if ys[j] else 0.0)
-            
+
             for d in range(X.shape[1]):
                 model.setSolVal(sol, w[d], init_w[d])
-            
+
             model.setSolVal(sol, c, init_c)
-            v_val = max(0, ((theta - 1) * xs.sum() + theta * ys.sum() + theta * epsilon_R))
+            v_val = max(
+                0, ((theta - 1) * xs.sum() + theta * ys.sum() + theta * epsilon_R)
+            )
             model.setSolVal(sol, V, v_val)
-            
+
             # Try adding the solution as a heuristic (optional)
             try:
                 model.addSol(sol)
             except:
                 print("Warning: Could not add initial solution as heuristic")
-            
+
             # Free the partial solution (optional)
             del sol
 
-            
         start_time = time.time()
         model.optimize()
         end_time = time.time()
@@ -551,7 +582,9 @@ def scip_solver(
                 "Time taken": end_time - start_time,
             }
         else:
-            results = {"Error": f"No optimal solution found. Status: {model.getStatus()}"}
+            results = {
+                "Error": f"No optimal solution found. Status: {model.getStatus()}"
+            }
 
         model.writeStatistics(f"{dataset_name}.txt")
         model.freeProb()
@@ -592,30 +625,27 @@ def scip_solver_c(
         seeds=seeds,
     )
 
-
     P = np.array(P, dtype=np.float64)
     N = np.array(N, dtype=np.float64)
     init_w = np.array(init_w, dtype=np.float64).tolist()
 
     res_scip = call_scip_solver(
-                P=P,
-                N=N,
-                init_w=init_w,
-                init_c=float(init_c),
-                theta=float(theta),
-                lambda_param=float(
-                    lambda_param) if lambda_param is not None else None,
-                epsilon_P=epsilon_P,
-                epsilon_N=epsilon_N,
-                epsilon_R=epsilon_R,
-                dataset_name=dataset_name.replace(
-                    " ", "_"),  # Remove spaces for filename
-                print_output=False,  # Set to True if you want to see SCIP output
-                time_limit=300.0
+        P=P,
+        N=N,
+        init_w=init_w,
+        init_c=float(init_c),
+        theta=float(theta),
+        lambda_param=float(lambda_param) if lambda_param is not None else None,
+        epsilon_P=epsilon_P,
+        epsilon_N=epsilon_N,
+        epsilon_R=epsilon_R,
+        dataset_name=dataset_name.replace(" ", "_"),  # Remove spaces for filename
+        print_output=False,  # Set to True if you want to see SCIP output
+        time_limit=300.0,
     )
 
     if "Error" in res_scip:
         print(f"Error in {dataset_name}: {res_scip['Error']}")
-        return None 
-    
+        return None
+
     return res_scip

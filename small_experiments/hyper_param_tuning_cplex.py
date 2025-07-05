@@ -5,7 +5,9 @@ from src.datasets.real_datasets import (
     WineQualityWhiteDataset,
     SouthGermanCreditDataset,
     CropMappingDataset,
-    s1, s2, s3
+    s1,
+    s2,
+    s3,
 )
 from src.datasets.synthetic_datasets import (
     ClusterDataset,
@@ -39,7 +41,7 @@ ds_list = []
 for dataset_name, dataset in datasets.items():
     P, N = dataset.generate()
     theta_0, theta_1, theta, lambda_param = dataset.params()
-    ds_name = "".join(dataset_name.lower().split(' '))
+    ds_name = "".join(dataset_name.lower().split(" "))
     ds_list.append(ds_name)
     cplex_solver(
         theta=theta,
@@ -49,7 +51,7 @@ for dataset_name, dataset in datasets.items():
         N=N,
         lambda_param=lambda_param,
         dataset_name=ds_name,
-        run=False
+        run=False,
     )
 
 # tune_time_limit = 120  # Adjust the tuning time limit

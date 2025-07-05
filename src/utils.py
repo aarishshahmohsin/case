@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
+
 class Dataset:
     def __init__(self):
         self._extract()
@@ -31,7 +32,7 @@ class Dataset:
         self.y = np.hstack([y_negative, y_positive])
 
     def generate(self, normalize=False):
-        if not hasattr(self, 'P'):
+        if not hasattr(self, "P"):
             positive_mask = self.y == 1
             negative_mask = self.y == 0
             self.P = self.X[positive_mask]
@@ -53,7 +54,6 @@ class Dataset:
         row_norms = np.linalg.norm(X, axis=1, keepdims=True)
         X = X / row_norms
         return X
-
 
 
 def plot_P_N(P, N):
@@ -82,13 +82,13 @@ def plot_P_N(P, N):
     plt.grid()
     plt.show()
 
-    
+
 def plot_P_N_3d(P, N):
     X = np.vstack((P, N))
     y = np.hstack((np.ones(len(P)), np.zeros(len(N))))
 
     fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
+    ax = fig.add_subplot(111, projection="3d")
 
     ax.scatter(
         X[y == 0][:, 0],
@@ -97,7 +97,7 @@ def plot_P_N_3d(P, N):
         color="blue",
         label="Negative Samples",
         alpha=0.1,
-        marker="x"
+        marker="x",
     )
     ax.scatter(
         X[y == 1][:, 0],
@@ -106,7 +106,7 @@ def plot_P_N_3d(P, N):
         color="red",
         label="Positive Samples",
         alpha=0.5,
-        marker="x"
+        marker="x",
     )
 
     ax.set_xlabel("Feature 1")

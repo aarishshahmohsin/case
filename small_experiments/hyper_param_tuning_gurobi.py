@@ -38,7 +38,7 @@ ds_list = []
 for dataset_name, dataset in datasets.items():
     P, N = dataset.generate()
     theta_0, theta_1, theta, lambda_param = dataset.params()
-    ds_name = "".join(dataset_name.lower().split(' '))
+    ds_name = "".join(dataset_name.lower().split(" "))
     ds_list.append(ds_name)
     gurobi_solver(
         theta=theta,
@@ -48,7 +48,7 @@ for dataset_name, dataset in datasets.items():
         N=N,
         lambda_param=lambda_param,
         dataset_name=ds_name,
-        run=False
+        run=False,
     )
 
 # Define time limits
@@ -63,6 +63,3 @@ command = f"grbtune Threads=8 LogToConsole=1  TimeLimit={time_limit} {' '.join([
 print(f"Running command: {command}")
 process = subprocess.run(command, shell=True, text=True)
 output = process.stdout
-
-
-

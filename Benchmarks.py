@@ -1,5 +1,3 @@
-import numpy as np
-import time
 from src.datasets.real_datasets import (
     BreastCancerDataset,
     WineQualityRedDataset,
@@ -19,7 +17,6 @@ from src.datasets.synthetic_datasets import (
 )
 from solvers.solvers import cplex_solver, gurobi_solver, scip_solver, separating_hyperplane, scip_solver_c
 import pandas as pd
-from utils import plot_P_N, plot_P_N_3d
 
 datasets = {
     "Breast Cancer": BreastCancerDataset(),
@@ -42,42 +39,18 @@ datasets = {
 
 
 times = 1
-results = {}
 
 final_res = []
 seeds = [42, 43, 44, 45, 46, 47, 48, 49, 50]
 import numpy as np
 
-    
+
 results_df = pd.DataFrame(columns=["Dataset", "Solver", "Initial Reach", "Time Taken", "Final Reach"])
 rows = [] 
 
 
 for i in range(times):
-    # plot_P_N_3d(P, N)
-    # print(P.shape, N.shape)
-    # print(P, N)
-    # plot_P_N(P, N)
-    # sums = []
-    # for i in range(len(P)):
-    #     sum = 0
-    #     for j in range(3):
-    #         sum += P[i][j]
-    #     sums.append(float(sum))
-
-    # sums.sort()
-    # with open('sorted_prism.txt', 'w') as f:
-    #     for i in sums:
-    #         f.write(f'{i}\n')
-    # print(sums)
-    # with open('prism.txt', 'w') as f:
-    #     for i in P:
-    #         f.write(f'{i}\n')
-    #     for i in N:
-    #         f.write(f'{i}\n')
-
     for dataset_name, dataset in datasets.items():
-        # P,N = dataset.generate()
         P,N = dataset.generate(normalize=True)
         theta_0, theta_1, theta, lambda_param = dataset.params()
 
@@ -129,7 +102,12 @@ for i in range(times):
             seeds=seeds[i],
         )
 
-        for solver_name, res in [("Gurobi", res_gurobi)]:
+        for solver_name, res in [
+            ("Gurobi", res_gurobi),
+            ("CPlex", res_cplex),
+            ("SCIP", res_scip),
+            ("SCIP_C", res_scip_c),
+        ]:
             if res:
                 row = {
                     "Dataset": dataset_name,
@@ -143,17 +121,5 @@ for i in range(times):
                 print(row)
                 rows.append(row)
 
-
-        # t = time.time()
-        # print(dataset_name)
-        # print(res_gurobi['Reach'])
-        # print(res_gurobi['Time taken'])
-        # final_res.append([dataset_name, res_gurobi['Reach'], res_gurobi['Time taken']])
-        # e = time.time()
-        # print(e - t)
-
-
 results_df = pd.DataFrame(rows)
 results_df.to_csv("experiment_results.csv", index=False)
-
-# print(final_res)
