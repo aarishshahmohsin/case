@@ -13,6 +13,7 @@ from constants import (
     PRINT_OUTPUT,
     RAM_LIMIT,
 )
+from solvers.scip_c_wrapper import call_scip_solver
 
 
 def separating_hyperplane(P, N, eps_P, eps_N, eps_R, theta, lamb, num_trials=10000, seeds=None):
@@ -32,11 +33,10 @@ def separating_hyperplane(P, N, eps_P, eps_N, eps_R, theta, lamb, num_trials=100
     Returns:
         tuple: Optimal hyperplane (w, c, reach), where w is the normal vector, c is the bias, and reach is the number of true positives.
     """
-    # if seeds: np.random.seed(seed=50)
     if seeds: np.random.seed(seed=seeds)
     dim = P.shape[1]  # Dimension of the feature space
     L = -np.inf
-    best_h = None
+    best_h = (np.zeros(dim), 0, 0)
 
     for _ in range(num_trials):
         # Choose a random unit vector w
@@ -67,7 +67,6 @@ def separating_hyperplane(P, N, eps_P, eps_N, eps_R, theta, lamb, num_trials=100
         if L_tilde > L:
             L = L_tilde
             best_h = (w, c, np.sum(x_tilde))
-            # print(c)
 
     return best_h
 
@@ -112,10 +111,7 @@ def gurobi_solver(
     initial_h = separating_hyperplane(
         P, N, epsilon_P, epsilon_N, epsilon_R, theta, lambda_param, num_trials=10000, seeds=seeds
     )
-    # initial_h = None
-    # print(initial_w, initial_c)
-
-    # Create the Gurobi model
+       # Create the Gurobi model
     model = GurobiModel("Wide-Reach Classification")
     env = Env()
 
@@ -144,19 +140,18 @@ def gurobi_solver(
     # model.setParam('Method', 2)
     # model.setParam('Cuts', 3)
 
-    if initial_h is not None:
-        init_w, init_c, reach = initial_h
-        distances_P = np.dot(P, init_w) - init_c
-        distances_N = np.dot(N, init_w) - init_c
-        print("initial reach = ", reach)
+    init_w, init_c, reach = initial_h
+    distances_P = np.dot(P, init_w) - init_c
+    distances_N = np.dot(N, init_w) - init_c
+    print("initial reach = ", reach)
 
-        xs = distances_P >= epsilon_P
-        ys = distances_N > -epsilon_N
-        assert xs.sum() == reach
-        for i in range(num_positive):
-            x[i].Start = int(xs[i])
-        for i in range(len(N_indices)):
-            y[i].Start = int(ys[i])
+    xs = distances_P >= epsilon_P
+    ys = distances_N > -epsilon_N
+    assert xs.sum() == reach
+    for i in range(num_positive):
+        x[i].Start = int(xs[i])
+    for i in range(len(N_indices)):
+        y[i].Start = int(ys[i])
 
     # Objective: Maximize the reach minus penalty for precision violation
     model.setObjective(sum(x[i] for i in P_indices) - lambda_param * V, GRB.MAXIMIZE)
@@ -197,11 +192,11 @@ def gurobi_solver(
             results = {
                 "Initial reach": reach,
                 "Reach": sum(x[i].x for i in P_indices),
-                "Hyperplane w": [w[d].x for d in range(X.shape[1])],
-                "Bias c": c.x,
-                "X": [x[d].x for d in range(len(P))],
-                "Y": [y[d].x for d in range(len(N))],
-                "Precision Violation V": V.x,
+                "Hyperplane w": [w[d].x for d in range(X.shape[1])],  # type: ignore
+                "Bias c": c.x,  # type: ignore
+                "X": [x[d].x for d in range(len(P))], # type: ignore
+                "Y": [y[d].x for d in range(len(N))], # type: ignore
+                "Precision Violation V": V.x, # type: ignore
                 "Node Count": model.NodeCount,
                 "Time taken": end_time - start_time,
             }
@@ -283,7 +278,7 @@ def cplex_solver(
     # model.parameters.mip.tolerances.mipgap = 0.0001  # Optimality gap
     # model.parameters.mip.tolerances.absmipgap = 0.0001  # Absolute gap
     # mip limits cutpasses -1
-    model.parameters.mip.limits.cutpasses= -1
+    model.parameters.mip.limits.cutpasses= -1  # types: ignore
 
 
     if TIME_LIMIT:
@@ -300,6 +295,7 @@ def cplex_solver(
     c = model.continuous_var(lb=-model.infinity, name="c")
     V = model.continuous_var(lb=0, name="V")
 
+    reach = 0
     if initial_h is not None:
         start = model.new_solution()
         init_w, init_c, reach = initial_h
@@ -367,9 +363,6 @@ def cplex_solver(
                 "Time taken": end_time - start_time,
             }
         else:
-            print([soluti[d] for d in range(len(P))])
-            # print([solution.get_value(y[d]) for d in range(len(N))])
-
             results = {"Error": "No optimal solution found."}
 
         # dispose
@@ -504,6 +497,7 @@ def scip_solver(
 
     model.writeProblem(f"{dataset_name}.lp")
 
+    reach = 0
     if run:
         if initial_h is not None:
             init_w, init_c, reach = initial_h
@@ -568,3 +562,60 @@ def scip_solver(
 
     else:
         return None
+
+
+def scip_solver_c(
+    *,
+    theta,
+    theta0,
+    theta1,
+    P,
+    N,
+    epsilon_P=epsilon_P,
+    epsilon_N=epsilon_N,
+    epsilon_R=epsilon_R,
+    lambda_param=None,
+    dataset_name="random_name",
+    run=True,
+    seeds=None,
+):
+
+    init_w, init_c, reach = separating_hyperplane(
+        P,
+        N,
+        epsilon_P,
+        epsilon_N,
+        epsilon_R,
+        theta,
+        lambda_param,
+        num_trials=10000,
+        seeds=seeds,
+    )
+
+
+    P = np.array(P, dtype=np.float64)
+    N = np.array(N, dtype=np.float64)
+    init_w = np.array(init_w, dtype=np.float64).tolist()
+
+    res_scip = call_scip_solver(
+                P=P,
+                N=N,
+                init_w=init_w,
+                init_c=float(init_c),
+                theta=float(theta),
+                lambda_param=float(
+                    lambda_param) if lambda_param is not None else None,
+                epsilon_P=epsilon_P,
+                epsilon_N=epsilon_N,
+                epsilon_R=epsilon_R,
+                dataset_name=dataset_name.replace(
+                    " ", "_"),  # Remove spaces for filename
+                print_output=False,  # Set to True if you want to see SCIP output
+                time_limit=300.0
+    )
+
+    if "Error" in res_scip:
+        print(f"Error in {dataset_name}: {res_scip['Error']}")
+        return None 
+    
+    return res_scip

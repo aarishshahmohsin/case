@@ -1,6 +1,6 @@
 import numpy as np
 import time
-from real_datasets import (
+from src.datasets.real_datasets import (
     BreastCancerDataset,
     WineQualityRedDataset,
     WineQualityWhiteDataset,
@@ -10,34 +10,34 @@ from real_datasets import (
     s2,
     s3,
 )
-from synthetic_datasets import (
+from src.datasets.synthetic_datasets import (
     ClusterDataset,
     TwoClusterDataset,
     DiffusedBenchmark,
     PrismDataset,
     TruncatedNormalPrism,
 )
-from solvers import cplex_solver, gurobi_solver, scip_solver, separating_hyperplane
+from solvers.solvers import cplex_solver, gurobi_solver, scip_solver, separating_hyperplane, scip_solver_c
 import pandas as pd
 from utils import plot_P_N, plot_P_N_3d
 
 datasets = {
-    # "Breast Cancer": BreastCancerDataset(),
-    # # "Wine Quality Red": WineQualityRedDataset(),
-    # "Wine Quality White": WineQualityWhiteDataset(),
-    # "South German Credit": SouthGermanCreditDataset(),
+    "Breast Cancer": BreastCancerDataset(),
+    "Wine Quality Red": WineQualityRedDataset(),
+    "Wine Quality White": WineQualityWhiteDataset(),
+    "South German Credit": SouthGermanCreditDataset(),
     "Crop Mapping": CropMappingDataset(),
-    # "Cluster 8": ClusterDataset(d=8),
-    # "Two Cluster 8": TwoClusterDataset(d=8),
-    # "Cluster": ClusterDataset(d=11),
-    # "Two Cluster": TwoClusterDataset(d=11),
-    # "Diffused Benchmark": DiffusedBenchmark(),
-    # 's1': s1(),
-    # 's2': s2(),
-    # 's3': s3(),
-    # '360 prism': PrismDataset(num_positive=360, s=0.707, d0=2, d=11),
-    # "Truncated Normal Prism": TruncatedNormalPrism(),
-    # "Prism": PrismDataset(d=11),
+    "Cluster 8": ClusterDataset(d=8),
+    "Two Cluster 8": TwoClusterDataset(d=8),
+    "Cluster": ClusterDataset(d=11),
+    "Two Cluster": TwoClusterDataset(d=11),
+    "Diffused Benchmark": DiffusedBenchmark(),
+    's1': s1(),
+    's2': s2(),
+    's3': s3(),
+    '360 prism': PrismDataset(num_positive=360, s=0.707, d0=2, d=11),
+    "Truncated Normal Prism": TruncatedNormalPrism(),
+    "Prism": PrismDataset(d=11),
 }
 
 
@@ -93,45 +93,55 @@ for i in range(times):
             seeds=seeds[i],
         )
 
-        # res_scip = scip_solver(
-        #     theta=theta,
-        #     theta0=theta_0,
-        #     theta1=theta_1,
-        #     P=P,
-        #     N=N,
-        #     lambda_param=lambda_param,
-        #     dataset_name=dataset_name,
-        #     run=True,
-        #     seeds=seeds[i],
-        # )
+        res_scip = scip_solver(
+            theta=theta,
+            theta0=theta_0,
+            theta1=theta_1,
+            P=P,
+            N=N,
+            lambda_param=lambda_param,
+            dataset_name=dataset_name,
+            run=True,
+            seeds=seeds[i],
+        )
 
-        # res_cplex = cplex_solver(
-        #     theta=theta,
-        #     theta0=theta_0,
-        #     theta1=theta_1,
-        #     P=P,
-        #     N=N,
-        #     lambda_param=lambda_param,
-        #     dataset_name=dataset_name,
-        #     run=True,
-        #     seeds=seeds[i],
-        # )
+        res_cplex = cplex_solver(
+            theta=theta,
+            theta0=theta_0,
+            theta1=theta_1,
+            P=P,
+            N=N,
+            lambda_param=lambda_param,
+            dataset_name=dataset_name,
+            run=True,
+            seeds=seeds[i],
+        )
+
+        res_scip_c = scip_solver_c(
+            theta=theta,
+            theta0=theta_0,
+            theta1=theta_1,
+            P=P,
+            N=N,
+            lambda_param=lambda_param,
+            dataset_name=dataset_name,
+            run=True,
+            seeds=seeds[i],
+        )
 
         for solver_name, res in [("Gurobi", res_gurobi)]:
-        # for solver_name, res in [("Gurobi", res_gurobi), ("SCIP", res_scip), ("CPLEX", res_cplex)]:
-            # print(res)
-            row = {
-                "Dataset": dataset_name,
-                "Solver": solver_name,
-                "Initial Reach": int(res['Initial reach']),
-                "Time Taken": res['Time taken'],
-                "Final Reach": res['Reach']
-            }
-            print(res['X'])
-            print(res['Y'])
-            print(len(res['Y']), sum(res['Y']))
-            print(row)
-            rows.append(row)
+            if res:
+                row = {
+                    "Dataset": dataset_name,
+                    "Solver": solver_name,
+                    "Initial Reach": int(res['Initial reach']),
+                    "Time Taken": res['Time taken'],
+                    "Final Reach": res['Reach']
+                }
+                print(res['X'])
+                print(res['Y'])
+                print(row)
+                rows.append(row)
 
 
         # t = time.time()
