@@ -54,42 +54,6 @@ for i in range(times):
         P,N = dataset.generate(normalize=True)
         theta_0, theta_1, theta, lambda_param = dataset.params()
 
-        res_gurobi = gurobi_solver(
-            theta=theta,
-            theta0=theta_0,
-            theta1=theta_1,
-            P=P,
-            N=N,
-            lambda_param=lambda_param,
-            dataset_name=dataset_name,
-            run=True,
-            seeds=seeds[i],
-        )
-
-        res_scip = scip_solver(
-            theta=theta,
-            theta0=theta_0,
-            theta1=theta_1,
-            P=P,
-            N=N,
-            lambda_param=lambda_param,
-            dataset_name=dataset_name,
-            run=True,
-            seeds=seeds[i],
-        )
-
-        res_cplex = cplex_solver(
-            theta=theta,
-            theta0=theta_0,
-            theta1=theta_1,
-            P=P,
-            N=N,
-            lambda_param=lambda_param,
-            dataset_name=dataset_name,
-            run=True,
-            seeds=seeds[i],
-        )
-
         res_scip_c = scip_solver_c(
             theta=theta,
             theta0=theta_0,
@@ -103,10 +67,7 @@ for i in range(times):
         )
 
         for solver_name, res in [
-            ("Gurobi", res_gurobi),
-            ("CPlex", res_cplex),
-            ("SCIP", res_scip),
-            # ("SCIP_C", res_scip_c),
+            ("SCIP_C", res_scip_c),
         ]:
             if res:
                 row = {

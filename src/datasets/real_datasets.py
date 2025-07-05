@@ -1,5 +1,5 @@
-from constants import DATA_PATH
-from utils import Dataset
+from src.constants import DATA_PATH
+from src.utils import Dataset
 import os
 
 

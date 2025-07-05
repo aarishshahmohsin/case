@@ -5,7 +5,7 @@ from docplex.mp.model import Model as CplexModel
 from pyscipopt import Model, quicksum
 import time
 import gc
-from constants import (
+from src.constants import (
     epsilon_N,
     epsilon_P,
     epsilon_R,
@@ -13,7 +13,7 @@ from constants import (
     PRINT_OUTPUT,
     RAM_LIMIT,
 )
-from solvers.scip_c_wrapper import call_scip_solver
+from src.solvers.scip_c_wrapper import call_scip_solver
 
 
 def separating_hyperplane(

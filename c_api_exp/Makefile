@@ -1,7 +1,7 @@
 # Makefile for SCIP C API Wide-Reach Classification Solver
 
 # SCIP installation path
-SCIP_PATH = /opt/homebrew/Cellar/scip/9.2.2
+SCIP_PATH = /opt/homebrew/Cellar/scip/9.2.2 # for arm macs
 
 # Compiler settings
 CC = gcc
