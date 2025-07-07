@@ -1,6 +1,6 @@
 import pandas as pd
 
-df = pd.read_csv("../experiment_results.csv")
+df = pd.read_csv("/Users/aarish/case/experiment_results.csv")
 avg_df = df.groupby(["Dataset", "Solver"], as_index=False).mean(numeric_only=True)
 pivot = avg_df.pivot(
     index="Dataset",

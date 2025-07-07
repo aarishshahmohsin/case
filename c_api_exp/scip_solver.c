@@ -172,8 +172,6 @@ SolverResults *scip_solver(
     retcode = SCIPsetRealParam(scip, "limits/gap", 0.01);
     // retcode = SCIPsetRealParam(scip, "constraints/initialsol/partial/unknrate", 1);
 
-
-
     // retcode = SCIPsetBoolParam(scip, "presolving/usesubsol", FALSE);
     // retcode = SCIPsetIntParam(scip, "emphasis/optimality", 1);
 
@@ -185,7 +183,6 @@ SolverResults *scip_solver(
         goto CLEANUP;
     }
 
-
     // Create problem
     retcode = SCIPcreateProbBasic(scip, "Wide-Reach Classification");
     if (retcode != SCIP_OKAY)
@@ -194,8 +191,6 @@ SolverResults *scip_solver(
         goto CLEANUP;
     }
 
-    
-   
     printf("reached the numerical stability part\n");
 
     // Set output verbosity
@@ -447,7 +442,7 @@ SolverResults *scip_solver(
     {
 
         // disable other heuristics
-        int disable = 1;
+        int disable = 0;
 
         if (disable)
         {
@@ -503,7 +498,7 @@ SolverResults *scip_solver(
 
             snprintf(paramname, sizeof(paramname), "heuristics/%s/priority", SCIP_HEURISTICS[target_heuristic_index]);
             retcode = SCIPsetIntParam(scip, paramname, 1);
-            
+
             snprintf(paramname, sizeof(paramname), "heuristics/%s/freqofs", SCIP_HEURISTICS[target_heuristic_index]);
             retcode = SCIPsetIntParam(scip, paramname, 0);
 
@@ -526,7 +521,6 @@ SolverResults *scip_solver(
         // retcode = SCIPsetRealParam(scip, "heuristics/completesol/maxunknownrate", 1);
         // retcode = SCIPsetBoolParam(scip, "heuristics/completesol/addallsols", TRUE);
 
-
         // Create and set partial solution if initial values are provided
         int USE_SOLUTION = 1;
         if (init_w != NULL && initial_xs != NULL && initial_ys != NULL && USE_SOLUTION)
@@ -541,7 +535,8 @@ SolverResults *scip_solver(
             // retcode = SCIPcreatePartialSol(scip, &partial_sol, NULL);
             // printf("check 1\n");
             // retcode = SCIPcreateSol(scip, &partial_sol, NULL);
-            retcode = SCIPcreateSol(scip, &partial_sol, NULL);
+            retcode = SCIPcreatePartialSol(scip, &partial_sol, NULL);
+            // retcode = SCIPcreateSol(scip, &partial_sol, NULL);
             // retcode = SCIPcreatePartialSol(scip, &partial_sol, NULL);
             // printf("check 2\n");
 
@@ -573,59 +568,56 @@ SolverResults *scip_solver(
                     }
                 }
 
-                // Set w variables in partial solution
-                for (int d = 0; d < n_features; d++)
-                {
-                    retcode = SCIPsetSolVal(scip, partial_sol, w_vars[d], init_w[d]);
-                    if (retcode != SCIP_OKAY)
-                    {
-                        printf("Warning: Could not set w[%d] in partial solution\n", d);
-                    }
-                }
+                // // Set w variables in partial solution
+                // for (int d = 0; d < n_features; d++)
+                // {
+                //     retcode = SCIPsetSolVal(scip, partial_sol, w_vars[d], init_w[d]);
+                //     if (retcode != SCIP_OKAY)
+                //     {
+                //         printf("Warning: Could not set w[%d] in partial solution\n", d);
+                //     }
+                // }
 
-                // Set c variable in partial solution
-                retcode = SCIPsetSolVal(scip, partial_sol, c_var, init_c);
-                if (retcode != SCIP_OKAY)
-                {
-                    printf("Warning: Could not set c in partial solution\n");
-                }
+                // // Set c variable in partial solution
+                // retcode = SCIPsetSolVal(scip, partial_sol, c_var, init_c);
+                // if (retcode != SCIP_OKAY)
+                // {
+                //     printf("Warning: Could not set c in partial solution\n");
+                // }
 
+                // // // Calculate and set V variable in partial solution
+                // double v_val = 0.0;
+                // double temp_sum = 0.0;
+                // for (int i = 0; i < num_positive; i++)
+                // {
+                //     temp_sum += initial_xs[i];
+                // }
+                // temp_sum *= (theta - 1.0);
 
-                // // Calculate and set V variable in partial solution
-                double v_val = 0.0;
-                double temp_sum = 0.0;
-                for (int i = 0; i < num_positive; i++)
-                {
-                    temp_sum += initial_xs[i];
-                }
-                temp_sum *= (theta - 1.0);
+                // for (int j = 0; j < num_negative; j++)
+                // {
+                //     temp_sum += theta * initial_ys[j];
+                // }
+                // temp_sum += theta * epsilon_R;
 
-                for (int j = 0; j < num_negative; j++)
-                {
-                    temp_sum += theta * initial_ys[j];
-                }
-                temp_sum += theta * epsilon_R;
-
-                v_val = fmax(0.0, temp_sum);
-                retcode = SCIPsetSolVal(scip, partial_sol, V_var, v_val);
-                if (retcode != SCIP_OKAY)
-                {
-                    printf("Warning: Could not set V in partial solution\n");
-                }
-
+                // v_val = fmax(0.0, temp_sum);
+                // retcode = SCIPsetSolVal(scip, partial_sol, V_var, v_val);
+                // if (retcode != SCIP_OKAY)
+                // {
+                //     printf("Warning: Could not set V in partial solution\n");
+                // }
 
                 // Try to add the partial solution
                 // SCIP_Bool stored;
                 // retcode = SCIPaddSolFree(scip, &partial_sol, &stored);
                 // SCIPtrySolFree(scip, SCIP_SOL **sol, unsigned int printreason, unsigned int completely, unsigned int checkbounds, unsigned int checkintegrality, unsigned int checklprows, unsigned int *stored)
-                // retcode = SCIPtrySolFree(scip, &partial_sol, TRUE, TRUE, 
-                    // FALSE, FALSE, FALSE, &stored);
-
+                // retcode = SCIPtrySolFree(scip, &partial_sol, TRUE, TRUE,
+                // FALSE, FALSE, FALSE, &stored);
 
                 retcode = SCIPaddSolFree(scip, &partial_sol, &stored);
                 // retcode = SCIPaddSol(scip, partial_sol, 0);
 
-                // retcode = SCIPtrySol(scip, partial_sol, 
+                // retcode = SCIPtrySol(scip, partial_sol,
                 //                          TRUE,  // not check feasibility
                 //                          FALSE,   // check bounds
                 //                          FALSE,   // check domain
@@ -635,8 +627,6 @@ SolverResults *scip_solver(
                 //                          &stored);
 
                 // retcode = SCIPaddSol(scip, partial_sol, 0);
-        
-        
             }
         }
 

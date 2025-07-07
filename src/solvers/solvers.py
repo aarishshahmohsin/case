@@ -49,7 +49,7 @@ def separating_hyperplane(
         # Choose a random point c in the unit hypercube
         c = np.random.uniform(0, 1, dim)
         c = -np.dot(w, c)
-        c = 0
+        # c = 0
 
         # Compute x_tilde and y_tilde arrays
         distances_P = np.dot(P, w) - c
@@ -132,12 +132,13 @@ def gurobi_solver(
         model.setParam("OutputFlag", 0)
     # if RAM_LIMIT:
     #     model.setParam("MemLimit", 1024)
+    model.setParam('Threads', 1)
 
     # Decision variables
-    # x = model.addVars(num_positive, vtype=GRB.BINARY, name="x")
-    # y = model.addVars(len(N_indices), vtype=GRB.BINARY, name="y")
-    x = model.addVars(num_positive, lb=0, ub=1, name="x")
-    y = model.addVars(len(N_indices), lb=0, ub=1, name="y")
+    x = model.addVars(num_positive, vtype=GRB.BINARY, name="x")
+    y = model.addVars(len(N_indices), vtype=GRB.BINARY, name="y")
+    # x = model.addVars(num_positive, lb=0, ub=1, name="x")
+    # y = model.addVars(len(N_indices), lb=0, ub=1, name="y")
     w = model.addVars(X.shape[1], lb=-GRB.INFINITY, name="w")
     c = model.addVar(lb=-GRB.INFINITY, name="c")
     V = model.addVar(lb=0, name="V")
@@ -298,6 +299,7 @@ def cplex_solver(
     # model.parameters.mip.tolerances.absmipgap = 0.0001  # Absolute gap
     # mip limits cutpasses -1
     model.parameters.mip.limits.cutpasses = -1  # types: ignore
+    model.parameters.threads.set(1) # setting number of threads 
 
     if TIME_LIMIT:
         model.set_time_limit(time_limit=TIME_LIMIT)
@@ -305,10 +307,10 @@ def cplex_solver(
     #     model.parameters.workmem = 4096
 
     # Decision variables
-    # x = model.binary_var_list(num_positive, name="x")
-    x = model.continuous_var_list(num_positive, lb=0, ub=1, name="x")
-    # y = model.binary_var_list(len(N_indices), name="y")
-    y = model.continuous_var_list(len(N_indices), lb=0, ub=1, name="y")
+    x = model.binary_var_list(num_positive, name="x")
+    # x = model.continuous_var_list(num_positive, lb=0, ub=1, name="x")
+    y = model.binary_var_list(len(N_indices), name="y")
+    # y = model.continuous_var_list(len(N_indices), lb=0, ub=1, name="y")
     w = model.continuous_var_list(X.shape[1], lb=-model.infinity, name="w")
     c = model.continuous_var(lb=-model.infinity, name="c")
     V = model.continuous_var(lb=0, name="V")
@@ -471,17 +473,21 @@ def scip_solver(
     # # model.setIntParam('separating/maxrounds', -1)  # Unlimited cutting plane rounds
     # model.setParam("numerics/feastol", 1e-10)
     model.setParam("numerics/epsilon", 1e-5)
+    # model.setParam("lpi/solver", "gurobi")
+    # print(model.getLPSolverName())
+    # model.setParam("lp/solver", "cplex")  # Switch to CPLEX if available
+ 
 
     # Decision variables
     x = {}
     for i in P_indices:
-        x[i] = model.addVar(lb=0, ub=1, name=f"x_{i}")
-        # x[i] = model.addVar(vtype="B", name=f"x_{i}")
+        # x[i] = model.addVar(lb=0, ub=1, name=f"x_{i}")
+        x[i] = model.addVar(vtype="B", name=f"x_{i}")
 
     y = {}
     for j in range(len(N_indices)):
-        y[j] = model.addVar(lb=0, ub=1, name=f"y_{j}")
-        # y[j] = model.addVar(vtype="B", name=f"y_{j}")
+        # y[j] = model.addVar(lb=0, ub=1, name=f"y_{j}")
+        y[j] = model.addVar(vtype="B", name=f"y_{j}")
 
     w = {}
     for d in range(X.shape[1]):
@@ -547,20 +553,20 @@ def scip_solver(
             for j in range(len(N_indices)):
                 model.setSolVal(sol, y[j], 1.0 if ys[j] else 0.0)
 
-            for d in range(X.shape[1]):
-                model.setSolVal(sol, w[d], init_w[d])
+            # for d in range(X.shape[1]):
+            #     model.setSolVal(sol, w[d], init_w[d])
 
-            model.setSolVal(sol, c, init_c)
-            v_val = max(
-                0, ((theta - 1) * xs.sum() + theta * ys.sum() + theta * epsilon_R)
-            )
-            model.setSolVal(sol, V, v_val)
+            # model.setSolVal(sol, c, init_c)
+            # v_val = max(
+            #     0, ((theta - 1) * xs.sum() + theta * ys.sum() + theta * epsilon_R)
+            # )
+            # model.setSolVal(sol, V, v_val)
 
-            # Try adding the solution as a heuristic (optional)
-            try:
-                model.addSol(sol)
-            except:
-                print("Warning: Could not add initial solution as heuristic")
+            # # Try adding the solution as a heuristic (optional)
+            # try:
+            #     model.addSol(sol)
+            # except:
+            #     print("Warning: Could not add initial solution as heuristic")
 
             # Free the partial solution (optional)
             del sol
@@ -625,6 +631,9 @@ def scip_solver_c(
         seeds=seeds,
     )
 
+    if not lambda_param:
+        lambda_param = (len(P) + 1) * theta1
+
     P = np.array(P, dtype=np.float64)
     N = np.array(N, dtype=np.float64)
     init_w = np.array(init_w, dtype=np.float64).tolist()
@@ -635,6 +644,7 @@ def scip_solver_c(
         init_w=init_w,
         init_c=float(init_c),
         theta=float(theta),
+        theta1=theta1,
         lambda_param=float(lambda_param) if lambda_param is not None else None,
         epsilon_P=epsilon_P,
         epsilon_N=epsilon_N,
