@@ -49,7 +49,7 @@ def separating_hyperplane(
         # Choose a random point c in the unit hypercube
         c = np.random.uniform(0, 1, dim)
         c = -np.dot(w, c)
-        # c = 0
+        c = 0
 
         # Compute x_tilde and y_tilde arrays
         distances_P = np.dot(P, w) - c
@@ -135,10 +135,10 @@ def gurobi_solver(
     model.setParam('Threads', 1)
 
     # Decision variables
-    x = model.addVars(num_positive, vtype=GRB.BINARY, name="x")
-    y = model.addVars(len(N_indices), vtype=GRB.BINARY, name="y")
-    # x = model.addVars(num_positive, lb=0, ub=1, name="x")
-    # y = model.addVars(len(N_indices), lb=0, ub=1, name="y")
+    # x = model.addVars(num_positive, vtype=GRB.BINARY, name="x")
+    # y = model.addVars(len(N_indices), vtype=GRB.BINARY, name="y")
+    x = model.addVars(num_positive, lb=0, ub=1, name="x")
+    y = model.addVars(len(N_indices), lb=0, ub=1, name="y")
     w = model.addVars(X.shape[1], lb=-GRB.INFINITY, name="w")
     c = model.addVar(lb=-GRB.INFINITY, name="c")
     V = model.addVar(lb=0, name="V")
@@ -279,7 +279,7 @@ def cplex_solver(
 
     # Parameters
     if not lambda_param:
-        lambda_param = (num_positive + 1) / theta
+        lambda_param = (num_positive + 1) * theta
 
     # Create the DOcplex model
     model = CplexModel(name="Wide-Reach Classification")
@@ -300,6 +300,7 @@ def cplex_solver(
     # mip limits cutpasses -1
     model.parameters.mip.limits.cutpasses = -1  # types: ignore
     model.parameters.threads.set(1) # setting number of threads 
+    model.parameters.simplex.tolerances.feasibility = 1e-9
 
     if TIME_LIMIT:
         model.set_time_limit(time_limit=TIME_LIMIT)
@@ -307,10 +308,10 @@ def cplex_solver(
     #     model.parameters.workmem = 4096
 
     # Decision variables
-    x = model.binary_var_list(num_positive, name="x")
-    # x = model.continuous_var_list(num_positive, lb=0, ub=1, name="x")
-    y = model.binary_var_list(len(N_indices), name="y")
-    # y = model.continuous_var_list(len(N_indices), lb=0, ub=1, name="y")
+    # x = model.binary_var_list(num_positive, name="x")
+    x = model.continuous_var_list(num_positive, lb=0, ub=1, name="x")
+    # y = model.binary_var_list(len(N_indices), name="y")
+    y = model.continuous_var_list(len(N_indices), lb=0, ub=1, name="y")
     w = model.continuous_var_list(X.shape[1], lb=-model.infinity, name="w")
     c = model.continuous_var(lb=-model.infinity, name="c")
     V = model.continuous_var(lb=0, name="V")
@@ -330,7 +331,7 @@ def cplex_solver(
             start.add_var_value(x[i], int(xs[i]))
         for i in range(len(N_indices)):
             start.add_var_value(y[i], int(ys[i]))
-        model.add_mip_start(start)
+        # model.add_mip_start(start)
 
     # Objective: Maximize the reach minus penalty for precision violation
     model.maximize(model.sum(x[i] for i in P_indices) - lambda_param * V)
@@ -384,6 +385,9 @@ def cplex_solver(
             }
         else:
             results = {"Error": "No optimal solution found."}
+            print("Status:", model.solve_details.status)
+            print("LP Status Code:", model.solve_details.status_code)
+            print("Feasible:", model.solve_details.feasible)
 
         # dispose
         model.clear()
@@ -481,13 +485,13 @@ def scip_solver(
     # Decision variables
     x = {}
     for i in P_indices:
-        # x[i] = model.addVar(lb=0, ub=1, name=f"x_{i}")
-        x[i] = model.addVar(vtype="B", name=f"x_{i}")
+        x[i] = model.addVar(lb=0, ub=1, name=f"x_{i}")
+        # x[i] = model.addVar(vtype="B", name=f"x_{i}")
 
     y = {}
     for j in range(len(N_indices)):
-        # y[j] = model.addVar(lb=0, ub=1, name=f"y_{j}")
-        y[j] = model.addVar(vtype="B", name=f"y_{j}")
+        y[j] = model.addVar(lb=0, ub=1, name=f"y_{j}")
+        # y[j] = model.addVar(vtype="B", name=f"y_{j}")
 
     w = {}
     for d in range(X.shape[1]):

@@ -19,7 +19,6 @@ from src.solvers.solvers import (
     cplex_solver,
     gurobi_solver,
     scip_solver,
-    separating_hyperplane,
     scip_solver_c,
 )
 import pandas as pd
@@ -43,80 +42,47 @@ datasets = {
     "Prism": PrismDataset(d=11),
 }
 
+N_ITERATIONS = 1
+SEEDS = [42, 43, 44, 45, 46, 47, 48, 49, 50]
+rows = []
 
-times = 1
+xs = []
+ys = []
 
-final_res = []
-seeds = [42, 43, 44, 45, 46, 47, 48, 49, 50]
-import numpy as np
 
 
 results_df = pd.DataFrame(
-    columns=["Dataset", "Solver", "Initial Reach", "Time Taken", "Final Reach"]
+    columns=["Dataset", "Solver", "Initial Reach", "Time Taken", "Final Reach"] 
 )
-rows = []
+
+solvers = {
+    "Gurobi": gurobi_solver, 
+    "CPlex": cplex_solver,
+    "SCIP": scip_solver,
+    "SCIP_C": scip_solver_c,
+}
 
 
-for i in range(times):
+for i in range(N_ITERATIONS):
     for dataset_name, dataset in datasets.items():
-        # P, N = dataset.generate(normalize=True)
-        P, N = dataset.generate()
+        P, N = dataset.generate(normalize=True)
+        # P, N = dataset.generate()
         theta_0, theta_1, theta, lambda_param = dataset.params()
 
-        # res_gurobi = gurobi_solver(
-        #     theta=theta,
-        #     theta0=theta_0,
-        #     theta1=theta_1,
-        #     P=P,
-        #     N=N,
-        #     lambda_param=lambda_param,
-        #     dataset_name=dataset_name,
-        #     run=True,
-        #     seeds=seeds[i],
-        # )
+        for solver_name, solver in solvers.items():
+            res = solver(
+                theta=theta,
+                theta0=theta_0,
+                theta1=theta_1,
+                P=P,
+                N=N,
+                lambda_param=lambda_param,
+                dataset_name=dataset_name,
+                run=True,
+                seeds=SEEDS[i],
 
-        res_scip = scip_solver(
-            theta=theta,
-            theta0=theta_0,
-            theta1=theta_1,
-            P=P,
-            N=N,
-            lambda_param=lambda_param,
-            dataset_name=dataset_name,
-            run=True,
-            seeds=seeds[i],
-        )
+            )
 
-        # res_cplex = cplex_solver(
-        #     theta=theta,
-        #     theta0=theta_0,
-        #     theta1=theta_1,
-        #     P=P,
-        #     N=N,
-        #     lambda_param=lambda_param,
-        #     dataset_name=dataset_name,
-        #     run=True,
-        #     seeds=seeds[i],
-        # )
-
-        # res_scip_c = scip_solver_c(
-        #     theta=theta,
-        #     theta0=theta_0,
-        #     theta1=theta_1,
-        #     P=P,
-        #     N=N,
-        #     lambda_param=lambda_param,
-        #     dataset_name=dataset_name,
-        #     run=True,
-        #     seeds=seeds[i],
-        # )
-
-        for solver_name, res in [
-            # ("Gurobi", res_gurobi),
-            # ("CPlex", res_cplex),
-            ("SCIP", res_scip),
-            # ("SCIP_C", res_scip_c),
-        ]:
             if res:
                 row = {
                     "Dataset": dataset_name,
@@ -125,10 +91,23 @@ for i in range(times):
                     "Time Taken": res["Time taken"],
                     "Final Reach": res["Reach"],
                 }
-                # print(res['X'])
-                # print(res['Y'])
+                print(res['X'])
+                xs.append(res['X'])
+                print(res['Y'])
+                ys.append(res['Y'])
                 print(row)
+                print(solver_name)
                 rows.append(row)
 
 results_df = pd.DataFrame(rows)
 results_df.to_csv("experiment_results.csv", index=False)
+
+final_ar = []
+for i in range(len(xs)):
+    final_ar.append('X')
+    final_ar.append(xs[i])
+    final_ar.append('Y')
+    final_ar.append(ys[i])
+
+for line in final_ar:
+    print(line)
