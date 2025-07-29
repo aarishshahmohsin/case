@@ -62,7 +62,7 @@ LIB_PATH = "/home/aarish/case/c_api_exp/scip_solver.so"
 
 ### 3. Download the Data
 
-#### 📁 Download Link
+#### Download Link
 
 [Google Drive: Data Folder](https://drive.google.com/drive/folders/1pUdUXI8ewrO2PLj9abAnXaN-wxSLaXhW?usp=sharing)
 
@@ -75,7 +75,7 @@ DATA_PATH = "/home/aarish/case/data"
 
 ---
 
-## ▶ Run Experiments
+## Run Experiments
 
 Before running, export library paths:
 
