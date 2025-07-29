@@ -1,4 +1,5 @@
 DATA_PATH = "/home/aarish/case/data"
+LIB_PATH = "/home/aarish/case/c_api_exp/scip_solver.so"
 TIME_LIMIT = 2 * 60
 RAM_LIMIT = 4096
 PRINT_OUTPUT = False

@@ -2,6 +2,7 @@ import ctypes
 import numpy as np
 from ctypes import Structure, POINTER, c_double, c_int, c_char_p, c_long
 import os
+from src.constants import LIB_PATH
 
 
 # Define the Matrix structure to match the C code
@@ -27,7 +28,7 @@ class SolverResults(Structure):
 
 
 class SCIPSolver:
-    def __init__(self, lib_path="/home/aarish/case/c_api_exp/scip_solver.so"):
+    def __init__(self, lib_path=LIB_PATH):
         """
         Initialize the SCIP solver wrapper.
 
