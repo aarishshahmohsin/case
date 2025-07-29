@@ -100,9 +100,12 @@ All experiment configurations are located in `Benchmarks.py`.
 
 To log the Feasibility Pump iterations:
 
-1. Replace the `heur_feaspump.c` file in the SCIP installation source.
+1. Replace the `heur_feaspump.c` file in the SCIP installation source e.g. 
+```
+scipoptsuite-9.2.2/scip/src/scip/heur_feaspump.c
+```
 2. Rebuild SCIP using `make` as above.
-3. This enables logging of rounded variables and objective evolution.
+3. This enables logging of lp and rounding
 
 ---
 
