@@ -497,23 +497,23 @@ SolverResults *scip_solver(
                 // }
             }
 
-            int target_heuristic_index = 4;
+            // int target_heuristic_index = 4;
 
-            char paramname[SCIP_MAXSTRLEN];
-            snprintf(paramname, sizeof(paramname), "heuristics/%s/freq", SCIP_HEURISTICS[target_heuristic_index]);
-            retcode = SCIPsetIntParam(scip, paramname, 1);
+            // char paramname[SCIP_MAXSTRLEN];
+            // snprintf(paramname, sizeof(paramname), "heuristics/%s/freq", SCIP_HEURISTICS[target_heuristic_index]);
+            // retcode = SCIPsetIntParam(scip, paramname, 1);
 
-            snprintf(paramname, sizeof(paramname), "heuristics/%s/priority", SCIP_HEURISTICS[target_heuristic_index]);
-            retcode = SCIPsetIntParam(scip, paramname, 1);
+            // snprintf(paramname, sizeof(paramname), "heuristics/%s/priority", SCIP_HEURISTICS[target_heuristic_index]);
+            // retcode = SCIPsetIntParam(scip, paramname, 1);
 
-            snprintf(paramname, sizeof(paramname), "heuristics/%s/freqofs", SCIP_HEURISTICS[target_heuristic_index]);
-            retcode = SCIPsetIntParam(scip, paramname, 0);
+            // snprintf(paramname, sizeof(paramname), "heuristics/%s/freqofs", SCIP_HEURISTICS[target_heuristic_index]);
+            // retcode = SCIPsetIntParam(scip, paramname, 0);
 
-            snprintf(paramname, sizeof(paramname), "heuristics/%s/maxdepth", SCIP_HEURISTICS[target_heuristic_index]);
-            retcode = SCIPsetIntParam(scip, paramname, -1);
+            // snprintf(paramname, sizeof(paramname), "heuristics/%s/maxdepth", SCIP_HEURISTICS[target_heuristic_index]);
+            // retcode = SCIPsetIntParam(scip, paramname, -1);
 
-            SCIP_HEUR *heur = SCIPfindHeur(scip, SCIP_HEURISTICS[target_heuristic_index]);
-            SCIPheurSetTimingmask(heur, SCIP_HEURTIMING_BEFORENODE + SCIP_HEURTIMING_DURINGLPLOOP + SCIP_HEURTIMING_AFTERLPLOOP + SCIP_HEURTIMING_AFTERLPNODE + SCIP_HEURTIMING_AFTERPSEUDONODE + SCIP_HEURTIMING_AFTERLPPLUNGE + SCIP_HEURTIMING_AFTERPSEUDOPLUNGE);
+            // SCIP_HEUR *heur = SCIPfindHeur(scip, SCIP_HEURISTICS[target_heuristic_index]);
+            // SCIPheurSetTimingmask(heur, SCIP_HEURTIMING_BEFORENODE + SCIP_HEURTIMING_DURINGLPLOOP + SCIP_HEURTIMING_AFTERLPLOOP + SCIP_HEURTIMING_AFTERLPNODE + SCIP_HEURTIMING_AFTERPSEUDONODE + SCIP_HEURTIMING_AFTERLPPLUNGE + SCIP_HEURTIMING_AFTERPSEUDOPLUNGE);
         }
         else
         {
@@ -523,9 +523,9 @@ SolverResults *scip_solver(
         // retcode = SCIPsetIntParam(scip, "heuristics/scheduler/freq", 1);
         // retcode = SCIPsetIntParam(scip, "heuristics/intshifting/freq", 1);
         // retcode = SCIPsetIntParam(scip, "heuristics/alns/freq", 1);
-        // retcode = SCIPsetIntParam(scip, "heuristics/intshifting/freq", 1);
-        retcode = SCIPsetIntParam(scip, "heuristics/completesol/freq", 1);
-        retcode = SCIPsetBoolParam(scip, "heuristics/feaspump/usefp20", TRUE);
+        retcode = SCIPsetIntParam(scip, "heuristics/intshifting/freq", 1);
+        // retcode = SCIPsetIntParam(scip, "heuristics/completesol/freq", 1);
+        // retcode = SCIPsetBoolParam(scip, "heuristics/feaspump/usefp20", TRUE);
         // retcode = SCIPsetRealParam(scip, "heuristics/completesol/maxunknownrate", 1);
         // retcode = SCIPsetBoolParam(scip, "heuristics/completesol/addallsols", TRUE);
 

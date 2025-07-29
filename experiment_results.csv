@@ -1,5 +1,0 @@
-Dataset,Solver,Initial Reach,Time Taken,Final Reach
-Breast Cancer,Gurobi,179,0.038722991943359375,357.0
-Breast Cancer,CPlex,179,0.0258026123046875,357.0
-Breast Cancer,SCIP,179,0.07942461967468262,357.0
-Breast Cancer,SCIP_C,179,0.10809,357.0

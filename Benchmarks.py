@@ -27,7 +27,7 @@ from src.solvers.solvers import (
 import pandas as pd
 
 datasets = {
-    "Breast Cancer": BreastCancerDataset(),
+    # "Breast Cancer": BreastCancerDataset(),
     # "Wine Quality Red": WineQualityRedDataset(),
     # "Wine Quality White": WineQualityWhiteDataset(),
     # "South German Credit": SouthGermanCreditDataset(),
@@ -44,7 +44,7 @@ datasets = {
     # "Truncated Normal Prism": TruncatedNormalPrism(),
     # "Prism": PrismDataset(d=11),
     # "Binary_2D": BinaryClusterDataset(n=400, d=2, separability=0.22 , cluster_std=0.5, seed=0),
-    # "Binary": BinaryClusterDataset(n=400, d=3, separability=0.2 , cluster_std=0.5, seed=0) 
+    "Binary": BinaryClusterDataset(n=400, d=3, separability=0.2 , cluster_std=0.5, seed=0) 
 }
 
 N_ITERATIONS = 1
@@ -60,9 +60,9 @@ results_df = pd.DataFrame(
 )
 
 solvers = {
-    "Gurobi": gurobi_solver, 
-    "CPlex": cplex_solver,
-    "SCIP": scip_solver,
+    # "Gurobi": gurobi_solver, 
+    # "CPlex": cplex_solver,
+    # "SCIP": scip_solver,
     "SCIP_C": scip_solver_c,
 }
 
@@ -72,6 +72,8 @@ for i in range(N_ITERATIONS):
         # P, N = dataset.generate(normalize=True)
         if not os.path.exists('P_{dataset_name}.npy'):
             P,N = dataset.generate()
+            np.save(f'P_{dataset_name}.npy', P)
+            np.save(f'N_{dataset_name}.npy', N)
         else:
             P = np.load(f'P_{dataset_name}.npy')
             N = np.load(f'N_{dataset_name}.npy')
