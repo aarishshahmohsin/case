@@ -165,11 +165,11 @@ SolverResults *scip_solver(
         goto CLEANUP;
     }
 
-    retcode = SCIPsetRealParam(scip, "numerics/feastol", 1e-9);
-    retcode = SCIPsetRealParam(scip, "numerics/epsilon", 1e-12);
+    // retcode = SCIPsetRealParam(scip, "numerics/feastol", 1e-9);
+    // retcode = SCIPsetRealParam(scip, "numerics/epsilon", 1e-12);
 
     // retcode = SCIPsetParam(scip, "heuristics/emphasis", "off");
-    retcode = SCIPsetRealParam(scip, "limits/gap", 0.01);
+    // retcode = SCIPsetRealParam(scip, "limits/gap", 0.01);
     // retcode = SCIPsetRealParam(scip, "constraints/initialsol/partial/unknrate", 1);
 
     // retcode = SCIPsetBoolParam(scip, "presolving/usesubsol", FALSE);
@@ -201,7 +201,12 @@ SolverResults *scip_solver(
 
     retcode = SCIPsetRealParam(scip, "limits/time", 120);
 
+    // SCIPsolveConcurrent(scip);
+    // retcode = SCIPsetIntParam(scip, "parallel/mode", 0);
+
     // Set additional parameters
+    // retcode = SCIPsetParam(scip, "node");
+    // retcode = SCIPsetIntParam(scip, "nodeselection/bfs/stdpriority", 250000);
     // retcode = SCIPsetIntParam(scip, "separating/maxrounds", -1);
 
     // Create decision variables
@@ -383,6 +388,7 @@ SolverResults *scip_solver(
         "rins",
         "dins",
         "crossover",
+        "intshifting",
         NULL // Sentinel value to mark end of array
     };
 
@@ -411,7 +417,7 @@ SolverResults *scip_solver(
     const char *important_heuristics[] = {
         // "adaptivediving",
         // "alns",
-        "intshifting",
+        // "intshifting",
         // "clique",
         "completesol",
         // "conflictdiving",
@@ -434,7 +440,7 @@ SolverResults *scip_solver(
         // "rounding",
         // "shifting",
         // "veclendiving",
-        "scheduler",
+        // "scheduler",
         // "zirounding",
         NULL};
 
@@ -442,7 +448,7 @@ SolverResults *scip_solver(
     {
 
         // disable other heuristics
-        int disable = 0;
+        int disable = 1;
 
         if (disable)
         {
@@ -465,8 +471,9 @@ SolverResults *scip_solver(
                 //             break;
                 //         }
                 //     }
-
                 //     int allow_important = 0;
+
+                
                 //     for (int j = 0; important_heuristics[j] != NULL; ++j)
                 //     {
                 //         if (strcmp(important_heuristics[j], heur_name) == 0)
@@ -490,7 +497,7 @@ SolverResults *scip_solver(
                 // }
             }
 
-            int target_heuristic_index = 0;
+            int target_heuristic_index = 4;
 
             char paramname[SCIP_MAXSTRLEN];
             snprintf(paramname, sizeof(paramname), "heuristics/%s/freq", SCIP_HEURISTICS[target_heuristic_index]);
@@ -517,7 +524,8 @@ SolverResults *scip_solver(
         // retcode = SCIPsetIntParam(scip, "heuristics/intshifting/freq", 1);
         // retcode = SCIPsetIntParam(scip, "heuristics/alns/freq", 1);
         // retcode = SCIPsetIntParam(scip, "heuristics/intshifting/freq", 1);
-        // retcode = SCIPsetIntParam(scip, "heuristics/completesol/freq", 1);
+        retcode = SCIPsetIntParam(scip, "heuristics/completesol/freq", 1);
+        retcode = SCIPsetBoolParam(scip, "heuristics/feaspump/usefp20", TRUE);
         // retcode = SCIPsetRealParam(scip, "heuristics/completesol/maxunknownrate", 1);
         // retcode = SCIPsetBoolParam(scip, "heuristics/completesol/addallsols", TRUE);
 

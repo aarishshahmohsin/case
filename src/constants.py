@@ -1,4 +1,4 @@
-DATA_PATH = "/Users/aarish/case/data"
+DATA_PATH = "/home/aarish/case/data"
 TIME_LIMIT = 2 * 60
 RAM_LIMIT = 4096
 PRINT_OUTPUT = False

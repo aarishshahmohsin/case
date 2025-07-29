@@ -117,7 +117,7 @@ def plot_P_N_3d(P, N):
     plt.show()
 
 
-def compute_reach(P, w, c, epsilon_P):
+def compute_reach(P, w, c, epsilon_P, tolerance=0):
     tau = P @ w - c  # τ(s) = s^T w - c
-    consistent = tau >= epsilon_P
+    consistent = tau >= epsilon_P - tolerance
     return np.sum(consistent)

@@ -417,3 +417,80 @@ class TruncatedNormalPrism(Dataset):
             positive_background_ratio=positive_background_ratio,
             num_clusters=num_clusters,
         )
+
+
+#   import numpy as np
+# from torch.utils.data import Dataset
+
+class BinaryClusterDataset(Dataset):
+    def __init__(self, n=400, d=2, separability=0.5, cluster_std=0.5, seed=None, barely_separable=False):
+        """
+        Creates a binary dataset with two clusters and adjustable linear separability.
+
+        Args:
+            n (int): Total number of samples.
+            d (int): Number of dimensions (2 or 3 recommended).
+            separability (float): [0, 1] - Controls cluster distance (ignored if barely_separable=True).
+            cluster_std (float): Standard deviation of clusters.
+            seed (int): Random seed for reproducibility.
+            barely_separable (bool): If True, forces clusters to be barely linearly separable.
+        """
+        assert d >= 2, "This dataset is designed for at least 2 dimensions."
+        if seed is not None:
+            np.random.seed(seed)
+
+        self.n = n
+        self.d = d
+        self.separability = separability
+        self.cluster_std = cluster_std
+        self.barely_separable = barely_separable
+        self.theta0 = 97 
+        self.theta1 = 100 
+        self.theta = 0.97
+
+        self._generate()
+
+    def _generate(self):
+        n_class = self.n // 2
+
+        if self.barely_separable:
+            # Generate raw clusters
+            positive_points = np.random.randn(n_class, self.d) * self.cluster_std
+            negative_points = np.random.randn(n_class, self.d) * self.cluster_std
+
+            # Find extremes along the first axis
+            max_pos = positive_points[:, 0].max()
+            min_neg = negative_points[:, 0].min()
+
+            # Tiny margin to ensure linear separability
+            epsilon = 0.05
+            shift = (max_pos - min_neg) / 2 + epsilon
+
+            # Shift clusters to create a narrow gap
+            positive_points[:, 0] -= (max_pos - shift)
+            negative_points[:, 0] += (shift - min_neg)
+        else:
+            # Standard approach: centers based on separability factor
+            base_dist = 5.0 * self.separability
+            center_pos = np.zeros(self.d)
+            center_neg = np.zeros(self.d)
+            center_pos[0] = base_dist / 2
+            center_neg[0] = -base_dist / 2
+
+            positive_points = np.random.randn(n_class, self.d) * self.cluster_std + center_pos
+            negative_points = np.random.randn(n_class, self.d) * self.cluster_std + center_neg
+
+        # Merge and shuffle
+        self.X = np.vstack((positive_points, negative_points))
+        self.y = np.hstack((np.ones(n_class), np.zeros(n_class)))
+
+        perm = np.random.permutation(self.n)
+        self.X = self.X[perm]
+        self.y = self.y[perm]
+
+    def __len__(self):
+        return self.n
+
+    def __getitem__(self, idx):
+        return self.X[idx], self.y[idx]
+ 

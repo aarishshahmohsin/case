@@ -27,7 +27,7 @@ class SolverResults(Structure):
 
 
 class SCIPSolver:
-    def __init__(self, lib_path="/Users/aarish/case/c_api_exp/scip_solver.so"):
+    def __init__(self, lib_path="/home/aarish/case/c_api_exp/scip_solver.so"):
         """
         Initialize the SCIP solver wrapper.
 

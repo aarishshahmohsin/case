@@ -49,7 +49,7 @@ def separating_hyperplane(
         # Choose a random point c in the unit hypercube
         c = np.random.uniform(0, 1, dim)
         c = -np.dot(w, c)
-        c = 0
+        # c = 0
 
         # Compute x_tilde and y_tilde arrays
         distances_P = np.dot(P, w) - c
@@ -132,13 +132,13 @@ def gurobi_solver(
         model.setParam("OutputFlag", 0)
     # if RAM_LIMIT:
     #     model.setParam("MemLimit", 1024)
-    model.setParam('Threads', 1)
+    # model.setParam('Threads', 1)
 
     # Decision variables
-    # x = model.addVars(num_positive, vtype=GRB.BINARY, name="x")
-    # y = model.addVars(len(N_indices), vtype=GRB.BINARY, name="y")
-    x = model.addVars(num_positive, lb=0, ub=1, name="x")
-    y = model.addVars(len(N_indices), lb=0, ub=1, name="y")
+    x = model.addVars(num_positive, vtype=GRB.BINARY, name="x")
+    y = model.addVars(len(N_indices), vtype=GRB.BINARY, name="y")
+    # x = model.addVars(num_positive, lb=0, ub=1, name="x")
+    # y = model.addVars(len(N_indices), lb=0, ub=1, name="y")
     w = model.addVars(X.shape[1], lb=-GRB.INFINITY, name="w")
     c = model.addVar(lb=-GRB.INFINITY, name="c")
     V = model.addVar(lb=0, name="V")
@@ -308,10 +308,10 @@ def cplex_solver(
     #     model.parameters.workmem = 4096
 
     # Decision variables
-    # x = model.binary_var_list(num_positive, name="x")
-    x = model.continuous_var_list(num_positive, lb=0, ub=1, name="x")
-    # y = model.binary_var_list(len(N_indices), name="y")
-    y = model.continuous_var_list(len(N_indices), lb=0, ub=1, name="y")
+    x = model.binary_var_list(num_positive, name="x")
+    # x = model.continuous_var_list(num_positive, lb=0, ub=1, name="x")
+    y = model.binary_var_list(len(N_indices), name="y")
+    # y = model.continuous_var_list(len(N_indices), lb=0, ub=1, name="y")
     w = model.continuous_var_list(X.shape[1], lb=-model.infinity, name="w")
     c = model.continuous_var(lb=-model.infinity, name="c")
     V = model.continuous_var(lb=0, name="V")
@@ -331,7 +331,7 @@ def cplex_solver(
             start.add_var_value(x[i], int(xs[i]))
         for i in range(len(N_indices)):
             start.add_var_value(y[i], int(ys[i]))
-        # model.add_mip_start(start)
+        model.add_mip_start(start)
 
     # Objective: Maximize the reach minus penalty for precision violation
     model.maximize(model.sum(x[i] for i in P_indices) - lambda_param * V)

@@ -1,7 +1,8 @@
-# Makefile for SCIP C API Wide-Reach Classification Solver
+# Makefile for SCIP C API Wide-Reach Classification Solver on Linux
 
-# SCIP installation path
-SCIP_PATH = /opt/homebrew/Cellar/scip/9.2.2
+# SCIP installation path (customized to your system)
+SCIP_PATH = /home/aarish/scip_install_try/scipoptsuite-9.2.2/scip
+# SCIP_PATH = /home/aarish/scip_cplex/scipoptsuite-9.2.2/scip
 
 # Compiler settings
 CC = gcc
@@ -12,13 +13,13 @@ CFLAGS = -O3 -Wall -Wextra -std=c99
 CXXFLAGS = -O3 -Wall -Wextra -std=c++11
 
 # Include directories
-INCLUDES = -I$(SCIP_PATH)/include
+INCLUDES = -I$(SCIP_PATH)/src -I$(SCIP_PATH)/obj/shared/O.linux.x86_64.gnu.opt/include
 
 # Library directories
-LIBDIRS = -L$(SCIP_PATH)/lib
+LIBDIRS = -L$(SCIP_PATH)/lib/shared
 
-# Libraries to link
-LIBS = -lscip -lsoplex  -ltbb -lgmp -lreadline -lz -lm
+# Libraries to link (no Zimpl here)
+LIBS = -lscip -ltbb -lgmp -lreadline -lncurses -lz -lm -ldl
 
 # Source files
 SOURCES = scip_solver.c
@@ -39,7 +40,7 @@ $(TARGET): $(OBJECTS)
 $(SHARED_LIB): $(OBJECTS)
 	$(CC) -shared -fPIC $(OBJECTS) $(LIBDIRS) $(LIBS) -o $(SHARED_LIB)
 
-# Build object files with position-independent code for shared library
+# Build object files with position-independent code
 %.o: %.c
 	$(CC) $(CFLAGS) -fPIC $(INCLUDES) -c $< -o $@
 
@@ -47,22 +48,16 @@ $(SHARED_LIB): $(OBJECTS)
 clean:
 	rm -f $(OBJECTS) $(TARGET) $(SHARED_LIB) *.lp
 
-# Install dependencies (macOS with Homebrew)
-install-deps:
-	@echo "Installing SCIP dependencies via Homebrew..."
-	brew install scip
-
 # Check SCIP installation
 check-scip:
 	@echo "Checking SCIP installation..."
 	@if [ -d "$(SCIP_PATH)" ]; then \
 		echo "SCIP found at $(SCIP_PATH)"; \
-		echo "Include directory: $(SCIP_PATH)/include"; \
-		echo "Library directory: $(SCIP_PATH)/lib"; \
-		ls -la $(SCIP_PATH)/lib/libscip* 2>/dev/null || echo "Warning: libscip not found in lib directory"; \
+		echo "Include directory: $(SCIP_PATH)/src"; \
+		echo "Library directory: $(SCIP_PATH)/lib/shared"; \
+		ls -la $(SCIP_PATH)/lib/shared/libscip* 2>/dev/null || echo "Warning: libscip not found"; \
 	else \
 		echo "SCIP not found at $(SCIP_PATH)"; \
-		echo "Please check your SCIP installation path"; \
 		exit 1; \
 	fi
 
@@ -81,13 +76,12 @@ valgrind: $(TARGET)
 # Help target
 help:
 	@echo "Available targets:"
-	@echo "  all         - Build the executable (default)"
+	@echo "  all         - Build the executable and shared lib"
 	@echo "  clean       - Remove build files"
 	@echo "  debug       - Build with debug symbols"
 	@echo "  run         - Build and run the program"
 	@echo "  valgrind    - Run with valgrind memory checker"
 	@echo "  check-scip  - Check SCIP installation"
-	@echo "  install-deps - Install SCIP via Homebrew"
 	@echo "  help        - Show this help message"
 
 # Run Python test with shared library
@@ -95,16 +89,4 @@ test-python: $(SHARED_LIB)
 	python3 scip_c_wrapper.py
 
 # Phony targets
-.PHONY: all clean debug run valgrind check-scip install-deps help test-python
-
-# Alternative library configurations for different systems
-# Uncomment the appropriate section for your system
-
-# For Linux systems (uncomment if needed):
-# LIBS = -lscip -lsoplex -ltbb -lgmp -lzimpl -lreadline -lncurses -lz -lm -ldl
-
-# For systems without some optional libraries (minimal build):
-# LIBS = -lscip -lsoplex -lgmp -lz -lm
-
-# Static linking (uncomment if needed):
-# LIBS = -static -lscip -lsoplex -ltbb -lgmp -lzimpl -lreadline -lz -lm
+.PHONY: all clean debug run valgrind check-scip help test-python
