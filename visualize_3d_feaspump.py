@@ -149,6 +149,7 @@ for i, (iteration, stage) in enumerate(frames_sequence):
     for idx in range(len(N)):
         var_name = f't_y_{idx}'
         val = safe_get(row, var_name, 0)
+        val = 1 - val 
         if val < TOLERANCE:  # Essentially 0
             color = 'green'
         elif val > (1-TOLERANCE):  # Essentially 1

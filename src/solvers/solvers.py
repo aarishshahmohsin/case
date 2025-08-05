@@ -163,7 +163,7 @@ def gurobi_solver(
     for i in range(num_positive):
         x[i].Start = int(xs[i])
     for i in range(len(N_indices)):
-        y[i].Start = int(ys[i])
+        y[i].Start = 1 - int(ys[i])
 
     # Objective: Maximize the reach minus penalty for precision violation
     model.setObjective(sum(x[i] for i in P_indices) - lambda_param * V, GRB.MAXIMIZE)
@@ -172,8 +172,8 @@ def gurobi_solver(
     model.addConstr(
         V
         >= (theta - 1) * sum(x[i] for i in P_indices)
-        + theta * sum(y[j] for j in range(len(N_indices)))
-        + theta * epsilon_R,
+        - theta * sum(y[j] for j in range(len(N_indices)))
+        + theta * epsilon_R + theta * len(N_indices),
         "PrecisionConstraint",
     )
 
@@ -188,7 +188,7 @@ def gurobi_solver(
     # Constraints: Classification constraints for negative samples
     for j, n_idx in enumerate(N_indices):
         model.addConstr(
-            y[j] >= sum(w[d] * X[n_idx, d] for d in range(X.shape[1])) - c + epsilon_N,
+            y[j] <= 1 - sum(w[d] * X[n_idx, d] for d in range(X.shape[1])) + c - epsilon_N,
             name=f"Negative_{j}",
         )
 
@@ -207,7 +207,7 @@ def gurobi_solver(
                 "Hyperplane w": [w[d].x for d in range(X.shape[1])],  # type: ignore
                 "Bias c": c.x,  # type: ignore
                 "X": [x[d].x for d in range(len(P))],  # type: ignore
-                "Y": [y[d].x for d in range(len(N))],  # type: ignore
+                "Y": [1 - y[d].x for d in range(len(N))],  # type: ignore
                 "Precision Violation V": V.x,  # type: ignore
                 "Node Count": model.NodeCount,
                 "Time taken": end_time - start_time,
@@ -485,13 +485,13 @@ def scip_solver(
     # Decision variables
     x = {}
     for i in P_indices:
-        x[i] = model.addVar(lb=0, ub=1, name=f"x_{i}")
-        # x[i] = model.addVar(vtype="B", name=f"x_{i}")
+        # x[i] = model.addVar(lb=0, ub=1, name=f"x_{i}")
+        x[i] = model.addVar(vtype="B", name=f"x_{i}")
 
     y = {}
     for j in range(len(N_indices)):
-        y[j] = model.addVar(lb=0, ub=1, name=f"y_{j}")
-        # y[j] = model.addVar(vtype="B", name=f"y_{j}")
+        # y[j] = model.addVar(lb=0, ub=1, name=f"y_{j}")
+        y[j] = model.addVar(vtype="B", name=f"y_{j}")
 
     w = {}
     for d in range(X.shape[1]):
@@ -513,8 +513,8 @@ def scip_solver(
     # Constraint: Precision constraint violation
     precision_expr = (
         (theta - 1) * quicksum(x[i] for i in P_indices)
-        + theta * quicksum(y[j] for j in range(len(N_indices)))
-        + theta * epsilon_R
+        - theta * quicksum(y[j] for j in range(len(N_indices)))
+        + theta * epsilon_R + theta * len(N_indices)
     )
 
     model.addCons(V >= precision_expr, name="PrecisionConstraint")
@@ -528,9 +528,9 @@ def scip_solver(
 
     for j, n_idx in enumerate(N_indices):
         neg_expr = (
-            quicksum(w[d] * X[n_idx, d] for d in range(X.shape[1])) - c + epsilon_N
+            1 -quicksum(w[d] * X[n_idx, d] for d in range(X.shape[1])) + c - epsilon_N
         )
-        model.addCons(y[j] >= neg_expr, name=f"Negative_{j}")
+        model.addCons(y[j] <= neg_expr, name=f"Negative_{j}")
 
     objective = quicksum(x[i] for i in P_indices) - lambda_param * V
     model.setObjective(objective, "maximize")
@@ -555,7 +555,7 @@ def scip_solver(
                 model.setSolVal(sol, x[i], 1.0 if xs[i] else 0.0)
 
             for j in range(len(N_indices)):
-                model.setSolVal(sol, y[j], 1.0 if ys[j] else 0.0)
+                model.setSolVal(sol, y[j], 0.0 if ys[j] else 1.0)
 
             # for d in range(X.shape[1]):
             #     model.setSolVal(sol, w[d], init_w[d])
@@ -567,10 +567,10 @@ def scip_solver(
             # model.setSolVal(sol, V, v_val)
 
             # # Try adding the solution as a heuristic (optional)
-            # try:
-            #     model.addSol(sol)
-            # except:
-            #     print("Warning: Could not add initial solution as heuristic")
+            try:
+                model.addSol(sol)
+            except:
+                print("Warning: Could not add initial solution as heuristic")
 
             # Free the partial solution (optional)
             del sol
@@ -586,7 +586,7 @@ def scip_solver(
                 "Hyperplane w": [model.getVal(w[d]) for d in range(X.shape[1])],
                 "Bias c": model.getVal(c),
                 "X": [model.getVal(x[d]) for d in range(len(P))],
-                "Y": [model.getVal(y[d]) for d in range(len(N))],
+                "Y": [1 - model.getVal(y[d]) for d in range(len(N))],
                 "Precision Violation V": model.getVal(V),
                 "Node Count": model.getNNodes(),
                 "Time taken": end_time - start_time,

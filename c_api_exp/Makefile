@@ -21,8 +21,17 @@ LIBDIRS = -L$(SCIP_PATH)/lib/shared
 # Libraries to link (no Zimpl here)
 LIBS = -lscip -ltbb -lgmp -lreadline -lncurses -lz -lm -ldl
 
-# Source files
-SOURCES = scip_solver.c
+# Check if heuristic files exist and conditionally include them
+HEUR_EXISTS := $(shell test -f heur_directionalrounding.c && test -f heur_directionalrounding.h && echo yes)
+
+ifeq ($(HEUR_EXISTS),yes)
+    SOURCES = scip_solver.c heur_directionalrounding.c
+    HEADERS = heur_directionalrounding.h
+else
+    SOURCES = scip_solver.c
+    HEADERS = 
+endif
+
 OBJECTS = $(SOURCES:.c=.o)
 
 # Target executable and shared library
@@ -44,9 +53,89 @@ $(SHARED_LIB): $(OBJECTS)
 %.o: %.c
 	$(CC) $(CFLAGS) -fPIC $(INCLUDES) -c $< -o $@
 
+# Conditional rules based on whether heuristic files exist
+ifeq ($(HEUR_EXISTS),yes)
+# Specific rule for the main solver (depends on heuristic header)
+scip_solver.o: scip_solver.c heur_directionalrounding.h
+	$(CC) $(CFLAGS) -fPIC $(INCLUDES) -c scip_solver.c -o scip_solver.o
+
+# Specific rule for the custom heuristic
+heur_directionalrounding.o: heur_directionalrounding.c heur_directionalrounding.h
+	$(CC) $(CFLAGS) -fPIC $(INCLUDES) -c heur_directionalrounding.c -o heur_directionalrounding.o
+else
+# Rule for main solver without heuristic dependency
+scip_solver.o: scip_solver.c
+	$(CC) $(CFLAGS) -fPIC $(INCLUDES) -c scip_solver.c -o scip_solver.o
+endif
+
+# Create template files for custom heuristic if they don't exist
+create-heuristic:
+	@if [ ! -f heur_directionalrounding.h ]; then \
+		echo "Creating heur_directionalrounding.h..."; \
+		echo '#ifndef __SCIP_HEUR_DIRECTIONALROUNDING_H__' > heur_directionalrounding.h; \
+		echo '#define __SCIP_HEUR_DIRECTIONALROUNDING_H__' >> heur_directionalrounding.h; \
+		echo '' >> heur_directionalrounding.h; \
+		echo '#include "scip/scip.h"' >> heur_directionalrounding.h; \
+		echo '' >> heur_directionalrounding.h; \
+		echo '#ifdef __cplusplus' >> heur_directionalrounding.h; \
+		echo 'extern "C" {' >> heur_directionalrounding.h; \
+		echo '#endif' >> heur_directionalrounding.h; \
+		echo '' >> heur_directionalrounding.h; \
+		echo 'SCIP_RETCODE SCIPincludeHeurDirectionalrounding(SCIP* scip);' >> heur_directionalrounding.h; \
+		echo '' >> heur_directionalrounding.h; \
+		echo '#ifdef __cplusplus' >> heur_directionalrounding.h; \
+		echo '}' >> heur_directionalrounding.h; \
+		echo '#endif' >> heur_directionalrounding.h; \
+		echo '' >> heur_directionalrounding.h; \
+		echo '#endif' >> heur_directionalrounding.h; \
+	fi
+	@if [ ! -f heur_directionalrounding.c ]; then \
+		echo "Creating heur_directionalrounding.c..."; \
+		echo '#include "scip/scip.h"' > heur_directionalrounding.c; \
+		echo '#include "heur_directionalrounding.h"' >> heur_directionalrounding.c; \
+		echo '' >> heur_directionalrounding.c; \
+		echo '#define HEUR_NAME             "directionalrounding"' >> heur_directionalrounding.c; \
+		echo '#define HEUR_DESC             "directional rounding heuristic"' >> heur_directionalrounding.c; \
+		echo '#define HEUR_DISPCHAR         '\''D'\''' >> heur_directionalrounding.c; \
+		echo '#define HEUR_PRIORITY         1000' >> heur_directionalrounding.c; \
+		echo '#define HEUR_FREQ             1' >> heur_directionalrounding.c; \
+		echo '#define HEUR_FREQOFS          0' >> heur_directionalrounding.c; \
+		echo '#define HEUR_MAXDEPTH         -1' >> heur_directionalrounding.c; \
+		echo '#define HEUR_TIMING           SCIP_HEURTIMING_AFTERLPPLUNGE' >> heur_directionalrounding.c; \
+		echo '#define HEUR_USESSUBSCIP      FALSE' >> heur_directionalrounding.c; \
+		echo '' >> heur_directionalrounding.c; \
+		echo 'static SCIP_DECL_HEUREXEC(heurExecDirectionalrounding)' >> heur_directionalrounding.c; \
+		echo '{' >> heur_directionalrounding.c; \
+		echo '   *result = SCIP_DIDNOTRUN;' >> heur_directionalrounding.c; \
+		echo '   return SCIP_OKAY;' >> heur_directionalrounding.c; \
+		echo '}' >> heur_directionalrounding.c; \
+		echo '' >> heur_directionalrounding.c; \
+		echo 'SCIP_RETCODE SCIPincludeHeurDirectionalrounding(SCIP* scip)' >> heur_directionalrounding.c; \
+		echo '{' >> heur_directionalrounding.c; \
+		echo '   SCIP_HEUR* heur = NULL;' >> heur_directionalrounding.c; \
+		echo '' >> heur_directionalrounding.c; \
+		echo '   SCIP_CALL( SCIPincludeHeurBasic(scip, &heur,' >> heur_directionalrounding.c; \
+		echo '         HEUR_NAME, HEUR_DESC, HEUR_DISPCHAR, HEUR_PRIORITY, HEUR_FREQ, HEUR_FREQOFS,' >> heur_directionalrounding.c; \
+		echo '         HEUR_MAXDEPTH, HEUR_TIMING, HEUR_USESSUBSCIP,' >> heur_directionalrounding.c; \
+		echo '         heurExecDirectionalrounding, NULL) );' >> heur_directionalrounding.c; \
+		echo '' >> heur_directionalrounding.c; \
+		echo '   assert(heur != NULL);' >> heur_directionalrounding.c; \
+		echo '' >> heur_directionalrounding.c; \
+		echo '   return SCIP_OKAY;' >> heur_directionalrounding.c; \
+		echo '}' >> heur_directionalrounding.c; \
+	fi
+
+# Build without custom heuristic (fallback option)
+build-without-heuristic:
+	$(MAKE) SOURCES=scip_solver.c all
+
 # Clean build files
 clean:
 	rm -f $(OBJECTS) $(TARGET) $(SHARED_LIB) *.lp
+
+# Clean everything including generated heuristic files
+clean-all: clean
+	rm -f heur_directionalrounding.h heur_directionalrounding.c
 
 # Check SCIP installation
 check-scip:
@@ -59,6 +148,15 @@ check-scip:
 	else \
 		echo "SCIP not found at $(SCIP_PATH)"; \
 		exit 1; \
+	fi
+
+# Check if heuristic files exist
+check-heuristic:
+	@echo "Checking custom heuristic files..."
+	@if [ -f "heur_directionalrounding.h" ] && [ -f "heur_directionalrounding.c" ]; then \
+		echo "Custom heuristic files found."; \
+	else \
+		echo "Custom heuristic files missing. Run 'make create-heuristic' first."; \
 	fi
 
 # Debug build
@@ -76,17 +174,21 @@ valgrind: $(TARGET)
 # Help target
 help:
 	@echo "Available targets:"
-	@echo "  all         - Build the executable and shared lib"
-	@echo "  clean       - Remove build files"
-	@echo "  debug       - Build with debug symbols"
-	@echo "  run         - Build and run the program"
-	@echo "  valgrind    - Run with valgrind memory checker"
-	@echo "  check-scip  - Check SCIP installation"
-	@echo "  help        - Show this help message"
+	@echo "  all                    - Build the executable and shared lib"
+	@echo "  create-heuristic       - Create template heuristic files"
+	@echo "  build-without-heuristic- Build without custom heuristic"
+	@echo "  check-heuristic        - Check if heuristic files exist"
+	@echo "  clean                  - Remove build files"
+	@echo "  clean-all              - Remove build files and heuristic templates"
+	@echo "  debug                  - Build with debug symbols"
+	@echo "  run                    - Build and run the program"
+	@echo "  valgrind               - Run with valgrind memory checker"
+	@echo "  check-scip             - Check SCIP installation"
+	@echo "  help                   - Show this help message"
 
 # Run Python test with shared library
 test-python: $(SHARED_LIB)
 	python3 scip_c_wrapper.py
 
 # Phony targets
-.PHONY: all clean debug run valgrind check-scip help test-python
+.PHONY: all clean clean-all debug run valgrind check-scip help test-python create-heuristic build-without-heuristic check-heuristic

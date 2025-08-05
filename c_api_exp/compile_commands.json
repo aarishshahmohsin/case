@@ -1,0 +1,21 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-O3",
+      "-Wall",
+      "-Wextra",
+      "-std=c99",
+      "-fPIC",
+      "-I/home/aarish/scip_install_try/scipoptsuite-9.2.2/scip/src",
+      "-I/home/aarish/scip_install_try/scipoptsuite-9.2.2/scip/obj/shared/O.linux.x86_64.gnu.opt/include",
+      "-c",
+      "-o",
+      "scip_solver.o",
+      "scip_solver.c"
+    ],
+    "directory": "/home/aarish/case/c_api_exp",
+    "file": "/home/aarish/case/c_api_exp/scip_solver.c",
+    "output": "/home/aarish/case/c_api_exp/scip_solver.o"
+  }
+]

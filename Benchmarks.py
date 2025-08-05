@@ -30,7 +30,7 @@ datasets = {
     # "Breast Cancer": BreastCancerDataset(),
     # "Wine Quality Red": WineQualityRedDataset(),
     # "Wine Quality White": WineQualityWhiteDataset(),
-    # "South German Credit": SouthGermanCreditDataset(),
+    "South German Credit": SouthGermanCreditDataset(),
     # "Crop Mapping": CropMappingDataset(),
     # "Cluster 8": ClusterDataset(d=8),
     # "Two Cluster 8": TwoClusterDataset(d=8),
@@ -80,18 +80,23 @@ for i in range(N_ITERATIONS):
         theta_0, theta_1, theta, lambda_param = dataset.params()
 
         for solver_name, solver in solvers.items():
-            res = solver(
-                theta=theta,
-                theta0=theta_0,
-                theta1=theta_1,
-                P=P,
-                N=N,
-                lambda_param=lambda_param,
-                dataset_name=dataset_name,
-                run=True,
-                seeds=SEEDS[i],
+            try:
+                res = solver(
+                    theta=theta,
+                    theta0=theta_0,
+                    theta1=theta_1,
+                    P=P,
+                    N=N,
+                    lambda_param=lambda_param,
+                    dataset_name=dataset_name,
+                    run=True,
+                    seeds=SEEDS[i],
 
-            )
+                )
+            except Exception as e:
+                res = None 
+                print(f"Failed for {dataset_name}")
+                
 
             if res:
                 row = {
@@ -101,9 +106,10 @@ for i in range(N_ITERATIONS):
                     "Time Taken": res["Time taken"],
                     "Final Reach": res["Reach"],
                 }
-                # print(res['X'])
+                print(res['X'])
                 # xs.append(res['X'])
-                # print(res['Y'])
+                print(len(res['Y']))
+                print(res['Y'])
                 # ys.append(res['Y'])
                 print(row)
                 print(solver_name)

@@ -1,0 +1,17 @@
+{
+  "configurations": [
+    {
+      "name": "Linux",
+      "includePath": [
+        "/usr/include",
+        "/usr/local/include",
+        "/usr/lib/clang/14/include",
+        "/home/aarish/scip_install_try/scipoptsuite-9.2.2"
+      ],
+      "compilerPath": "/usr/bin/clang",
+      "cStandard": "c11",
+      "cppStandard": "c++17"
+    }
+  ],
+  "version": 4
+}

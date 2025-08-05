@@ -3,8 +3,13 @@
 #include <string.h>
 #include <math.h>
 #include <time.h>
+#include "scip/def.h"
 #include "scip/scip.h"
+#include "scip/scip_param.h"
 #include "scip/scipdefplugins.h"
+// #include "scip/heur_directionalrounding.h"
+#include "heur_directionalrounding.h"
+#include "scip/type_retcode.h"
 
 typedef struct
 {
@@ -177,11 +182,26 @@ SolverResults *scip_solver(
 
     // Include default plugins
     retcode = SCIPincludeDefaultPlugins(scip);
+
+    
+
     if (retcode != SCIP_OKAY)
     {
         strcpy(results->error_msg, "Failed to include default plugins");
         goto CLEANUP;
     }
+
+
+    // include directional rounding 
+    retcode = SCIPincludeHeurDirectionalRounding(scip);
+
+    if (retcode != SCIP_OKAY) {
+        strcpy(results->error_msg, "Failed to include directional rounding plugin");
+        goto CLEANUP;
+    }
+
+    // SCIPsetIntParam(scip, "display/heuristics", 1);
+
 
     // Create problem
     retcode = SCIPcreateProbBasic(scip, "Wide-Reach Classification");
@@ -190,6 +210,8 @@ SolverResults *scip_solver(
         strcpy(results->error_msg, "Failed to create problem");
         goto CLEANUP;
     }
+
+
 
     printf("reached the numerical stability part\n");
 
@@ -292,11 +314,11 @@ SolverResults *scip_solver(
     // Add y variables with coefficient theta
     for (int j = 0; j < num_negative; j++)
     {
-        retcode = SCIPaddCoefLinear(scip, precision_cons, y_vars[j], theta);
+        retcode = SCIPaddCoefLinear(scip, precision_cons, y_vars[j], -theta);
     }
 
     // Set RHS to -theta*epsilon_R (since we moved V to LHS with -1 coefficient)
-    SCIPchgRhsLinear(scip, precision_cons, -theta * epsilon_R);
+    SCIPchgRhsLinear(scip, precision_cons, -theta * epsilon_R - theta * num_negative);
 
     retcode = SCIPaddCons(scip, precision_cons);
     if (retcode != SCIP_OKAY)
@@ -342,10 +364,10 @@ SolverResults *scip_solver(
         char cons_name[32];
         sprintf(cons_name, "Negative_%d", j);
 
-        retcode = SCIPcreateConsBasicLinear(scip, &neg_cons, cons_name, 0, NULL, NULL, -SCIPinfinity(scip), SCIPinfinity(scip));
+        retcode = SCIPcreateConsBasicLinear(scip, &neg_cons, cons_name, 0, NULL, NULL, -SCIPinfinity(scip), 1.0 - epsilon_N);
 
         // Add y_j with coefficient -1 (since we want y_j >= ...)
-        retcode = SCIPaddCoefLinear(scip, neg_cons, y_vars[j], -1.0);
+        retcode = SCIPaddCoefLinear(scip, neg_cons, y_vars[j], 1.0);
 
         // Add w_d variables with coefficients X[num_positive+j,d]
         for (int d = 0; d < n_features; d++)
@@ -357,7 +379,7 @@ SolverResults *scip_solver(
         retcode = SCIPaddCoefLinear(scip, neg_cons, c_var, -1.0);
 
         // Set RHS to -epsilon_N
-        SCIPchgRhsLinear(scip, neg_cons, -epsilon_N);
+        // SCIPchgRhsLinear(scip, neg_cons, -epsilon_N);
 
         retcode = SCIPaddCons(scip, neg_cons);
         SCIPreleaseCons(scip, &neg_cons);
@@ -367,10 +389,10 @@ SolverResults *scip_solver(
     retcode = SCIPsetObjsense(scip, SCIP_OBJSENSE_MAXIMIZE);
 
     // Set objective coefficients
-    for (int i = 0; i < num_positive; i++)
-    {
-        retcode = SCIPchgVarObj(scip, x_vars[i], 1.0);
-    }
+    // for (int i = 0; i < num_positive; i++)
+    // {
+    //     retcode = SCIPchgVarObj(scip, x_vars[i], 1.0);
+    // }
     retcode = SCIPchgVarObj(scip, V_var, -lambda_param);
 
     // Write problem to file
@@ -448,7 +470,7 @@ SolverResults *scip_solver(
     {
 
         // disable other heuristics
-        int disable = 1;
+        int disable = 0;
 
         if (disable)
         {
@@ -523,8 +545,13 @@ SolverResults *scip_solver(
         // retcode = SCIPsetIntParam(scip, "heuristics/scheduler/freq", 1);
         // retcode = SCIPsetIntParam(scip, "heuristics/intshifting/freq", 1);
         // retcode = SCIPsetIntParam(scip, "heuristics/alns/freq", 1);
-        retcode = SCIPsetIntParam(scip, "heuristics/intshifting/freq", 1);
-        // retcode = SCIPsetIntParam(scip, "heuristics/completesol/freq", 1);
+        // retcode = SCIPsetIntParam(scip, "heuristics/intshifting/freq", 1);
+        retcode = SCIPsetIntParam(scip, "heuristics/completesol/freq", 1);
+
+        // retcode = SCIPsetIntParam(scip, "heuristics/feaspump/freq", 1);
+        // retcode = SCIPincludeHeurDirectionalrounding(scip);
+        retcode = SCIPsetIntParam(scip, "heuristics/directionalrounding/freq", 1);
+        retcode = SCIPsetBoolParam(scip, "heuristics/directionalrounding/down", TRUE);
         // retcode = SCIPsetBoolParam(scip, "heuristics/feaspump/usefp20", TRUE);
         // retcode = SCIPsetRealParam(scip, "heuristics/completesol/maxunknownrate", 1);
         // retcode = SCIPsetBoolParam(scip, "heuristics/completesol/addallsols", TRUE);
@@ -569,7 +596,7 @@ SolverResults *scip_solver(
                 // Set y variables in partial solution
                 for (int j = 0; j < num_negative; j++)
                 {
-                    retcode = SCIPsetSolVal(scip, partial_sol, y_vars[j], (double)initial_ys[j]);
+                    retcode = SCIPsetSolVal(scip, partial_sol, y_vars[j], 1.0 - (double)initial_ys[j]);
                     if (retcode != SCIP_OKAY)
                     {
                         printf("Warning: Could not set y[%d] in partial solution\n", j);
@@ -691,11 +718,12 @@ SolverResults *scip_solver(
                 results->y_vals = (double *)malloc(num_negative * sizeof(double));
                 for (int j = 0; j < num_negative; j++)
                 {
-                    results->y_vals[j] = SCIPgetSolVal(scip, sol, y_vars[j]);
+                    results->y_vals[j] = 1.0 - SCIPgetSolVal(scip, sol, y_vars[j]);
                 }
 
                 // Extract precision violation
                 results->precision_violation_v = SCIPgetSolVal(scip, sol, V_var);
+            
 
                 // Extract node count
                 results->node_count = SCIPgetNNodes(scip);
